@@ -3,4 +3,4 @@
 export const CARD_WIDTH = 1012
 export const CARD_HEIGHT = 638
 export const CARD_ASPECT_RATIO = CARD_WIDTH / CARD_HEIGHT
-export const CARD_CORNER_RADIUS = 24
+export const CARD_CORNER_RADIUS = 12

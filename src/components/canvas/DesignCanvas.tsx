@@ -195,19 +195,17 @@ function CardCanvas({ side }: { side: CardSide }) {
       </div>
       <div
         ref={containerRef}
-        className="w-full overflow-hidden cursor-pointer"
+        className={cn(
+          'w-full overflow-hidden cursor-pointer border transition-all',
+          isActive ? 'border-foreground/30 shadow-lg' : 'border-border shadow-md'
+        )}
+        style={{ borderRadius: `${CARD_CORNER_RADIUS}px` }}
         onClick={() => {
           window.__fabricCanvas = canvasRef.current
           setActiveSide(side)
         }}
       >
-        <div
-          className={cn(
-            'relative overflow-hidden shadow-md ring-1 transition-all',
-            isActive ? 'ring-foreground/30 shadow-lg' : 'ring-border'
-          )}
-          style={{ borderRadius: `${CARD_CORNER_RADIUS}px` }}
-        >
+        <div className="overflow-hidden" style={{ borderRadius: `${CARD_CORNER_RADIUS - 1}px` }}>
           <canvas ref={canvasElRef} />
         </div>
       </div>
