@@ -12,6 +12,7 @@ function generateShortId(): string {
 
 export interface SavedDesign {
   id: string
+  design_id: string
   material_id: string
   variation_id: string
   front_canvas_json: string | null
@@ -45,7 +46,7 @@ export async function saveDesign(): Promise<string | null> {
     const { error } = await supabase
       .from('designs')
       .update(payload)
-      .eq('id', designId)
+      .eq('design_id', designId)
 
     if (error) throw error
     state.setLastSaved(new Date())
@@ -55,13 +56,13 @@ export async function saveDesign(): Promise<string | null> {
   const shortId = generateShortId()
   const { data, error } = await supabase
     .from('designs')
-    .insert({ id: shortId, ...payload })
-    .select('id')
+    .insert({ design_id: shortId, ...payload })
+    .select('design_id')
     .single()
 
   if (error) throw error
 
-  const newId = data.id as string
+  const newId = data.design_id as string
   state.setDesignId(newId)
   state.setLastSaved(new Date())
   return newId
@@ -76,7 +77,7 @@ export async function loadDesign(id: string): Promise<boolean> {
   const { data, error } = await supabase
     .from('designs')
     .select('*')
-    .eq('id', id)
+    .eq('design_id', id)
     .single()
 
   if (error || !data) return false
@@ -89,7 +90,7 @@ export async function loadDesign(id: string): Promise<boolean> {
     backCanvasJson: design.back_canvas_json,
     frontBgColor: design.front_bg_color,
     backBgColor: design.back_bg_color,
-    designId: design.id,
+    designId: design.design_id,
   })
 
   return true
