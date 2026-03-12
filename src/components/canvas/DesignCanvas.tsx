@@ -84,7 +84,7 @@ export function DesignCanvas() {
     }
   }, [makeHandler])
 
-  // Handle side switching — only triggered by activeSide change
+  // Handle side switching
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -167,10 +167,25 @@ export function DesignCanvas() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
+  const sideLabel = activeSide === 'front' ? 'Front' : 'Back'
+
   return (
-    <div ref={containerRef} className="w-full overflow-hidden">
-      <div className="relative rounded-xl overflow-hidden shadow-lg border border-border">
-        <canvas ref={canvasElRef} />
+    <div className="space-y-3">
+      {/* Side indicator */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          {sideLabel} Side
+        </span>
+        <span className="text-[11px] text-muted-foreground">
+          CR80 — 85.6 × 53.98 mm
+        </span>
+      </div>
+
+      {/* Canvas */}
+      <div ref={containerRef} className="w-full overflow-hidden">
+        <div className="relative rounded-xl overflow-hidden shadow-md ring-1 ring-border">
+          <canvas ref={canvasElRef} />
+        </div>
       </div>
     </div>
   )

@@ -1,20 +1,22 @@
 import { materials, type Material, type MaterialVariation } from '@/config/materials'
 import { useDesignStore } from '@/store/design-store'
-import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
+import { Check } from 'lucide-react'
 
 export function MaterialSelector() {
   const { materialId, variationId, setMaterial } = useDesignStore()
-
   const selectedMaterial = materials.find((m) => m.id === materialId)
 
   return (
     <div className="space-y-4">
+      {/* Material type */}
       <div>
-        <h3 className="text-sm font-medium mb-2">Material</h3>
-        <div className="grid grid-cols-2 gap-2">
+        <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2.5">
+          Material
+        </h3>
+        <div className="grid grid-cols-2 gap-1.5">
           {materials.map((material) => (
-            <MaterialCard
+            <MaterialChip
               key={material.id}
               material={material}
               selected={materialId === material.id}
@@ -24,12 +26,15 @@ export function MaterialSelector() {
         </div>
       </div>
 
+      {/* Variations */}
       {selectedMaterial && (
         <div>
-          <h3 className="text-sm font-medium mb-2">Variation</h3>
-          <div className="grid grid-cols-2 gap-2">
+          <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2.5">
+            Finish
+          </h3>
+          <div className="space-y-1">
             {selectedMaterial.variations.map((variation) => (
-              <VariationCard
+              <VariationRow
                 key={variation.id}
                 variation={variation}
                 selected={variationId === variation.id}
@@ -43,7 +48,7 @@ export function MaterialSelector() {
   )
 }
 
-function MaterialCard({
+function MaterialChip({
   material,
   selected,
   onClick,
@@ -53,29 +58,26 @@ function MaterialCard({
   onClick: () => void
 }) {
   return (
-    <Card
-      className={cn(
-        'cursor-pointer transition-all hover:border-foreground/30',
-        selected && 'border-foreground ring-1 ring-foreground'
-      )}
+    <button
       onClick={onClick}
+      className={cn(
+        'flex items-center gap-2 rounded-lg border px-3 py-2 text-left transition-colors',
+        'hover:bg-muted/80',
+        selected
+          ? 'border-foreground bg-foreground/[0.03]'
+          : 'border-border bg-card'
+      )}
     >
-      <CardContent className="p-3">
-        <div className="flex items-center gap-2">
-          <div
-            className="w-4 h-4 rounded-full border border-border"
-            style={{ backgroundColor: material.variations[0].colorHint }}
-          />
-          <div>
-            <p className="text-sm font-medium">{material.name}</p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+      <div
+        className="size-3 rounded-full ring-1 ring-border shrink-0"
+        style={{ backgroundColor: material.variations[0].colorHint }}
+      />
+      <span className="text-xs font-medium truncate">{material.name}</span>
+    </button>
   )
 }
 
-function VariationCard({
+function VariationRow({
   variation,
   selected,
   onClick,
@@ -85,25 +87,23 @@ function VariationCard({
   onClick: () => void
 }) {
   return (
-    <Card
-      className={cn(
-        'cursor-pointer transition-all hover:border-foreground/30',
-        selected && 'border-foreground ring-1 ring-foreground'
-      )}
+    <button
       onClick={onClick}
+      className={cn(
+        'flex items-center gap-3 w-full rounded-lg px-3 py-2 text-left transition-colors',
+        'hover:bg-muted/80',
+        selected ? 'bg-muted' : 'bg-transparent'
+      )}
     >
-      <CardContent className="p-3">
-        <div className="flex items-center gap-2">
-          <div
-            className="w-4 h-4 rounded-full border border-border"
-            style={{ backgroundColor: variation.colorHint }}
-          />
-          <div>
-            <p className="text-sm font-medium">{variation.name}</p>
-            <p className="text-xs text-muted-foreground">{variation.description}</p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+      <div
+        className="size-5 rounded-md ring-1 ring-border shrink-0"
+        style={{ backgroundColor: variation.colorHint }}
+      />
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-medium">{variation.name}</p>
+        <p className="text-[11px] text-muted-foreground truncate">{variation.description}</p>
+      </div>
+      {selected && <Check className="size-3.5 text-foreground shrink-0" />}
+    </button>
   )
 }

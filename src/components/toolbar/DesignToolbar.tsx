@@ -1,10 +1,10 @@
 import { useDesignStore } from '@/store/design-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textbox, FabricImage } from 'fabric'
 import { useRef } from 'react'
+import { Type, ImagePlus, Trash2 } from 'lucide-react'
 
 export function DesignToolbar() {
   const { activeSide, setActiveSide, frontBgColor, backBgColor, setBgColor } =
@@ -47,7 +47,6 @@ export function DesignToolbar() {
           left: 50,
           top: 50,
         })
-        // Scale to fit within card
         const maxWidth = 300
         const maxHeight = 200
         const scaleX = maxWidth / fabricImg.width!
@@ -62,8 +61,6 @@ export function DesignToolbar() {
       imgElement.src = dataUrl
     }
     reader.readAsDataURL(file)
-
-    // Reset input so the same file can be uploaded again
     e.target.value = ''
   }
 
@@ -84,36 +81,44 @@ export function DesignToolbar() {
 
   return (
     <div className="space-y-4">
+      {/* Side switcher */}
       <div>
-        <h3 className="text-sm font-medium mb-2">Card Side</h3>
+        <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2.5">
+          Card Side
+        </h3>
         <Tabs
           value={activeSide}
           onValueChange={(v) => setActiveSide(v as 'front' | 'back')}
         >
           <TabsList className="w-full">
-            <TabsTrigger value="front" className="flex-1">
+            <TabsTrigger value="front" className="flex-1 text-xs">
               Front
             </TabsTrigger>
-            <TabsTrigger value="back" className="flex-1">
+            <TabsTrigger value="back" className="flex-1 text-xs">
               Back
             </TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
-      <div className="space-y-2">
-        <h3 className="text-sm font-medium">Add Elements</h3>
-        <div className="flex gap-2">
-          <Button onClick={addText} variant="outline" size="sm" className="flex-1">
-            + Text
+      {/* Add elements */}
+      <div>
+        <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2.5">
+          Elements
+        </h3>
+        <div className="flex gap-1.5">
+          <Button onClick={addText} variant="outline" size="sm" className="flex-1 gap-1.5">
+            <Type className="size-3.5" />
+            Text
           </Button>
           <Button
             onClick={() => fileInputRef.current?.click()}
             variant="outline"
             size="sm"
-            className="flex-1"
+            className="flex-1 gap-1.5"
           >
-            + Image
+            <ImagePlus className="size-3.5" />
+            Image
           </Button>
         </div>
         <input
@@ -125,38 +130,48 @@ export function DesignToolbar() {
         />
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="bg-color" className="text-sm font-medium">
+      {/* Background color */}
+      <div>
+        <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2.5">
           Background
-        </Label>
+        </h3>
         <div className="flex items-center gap-2">
-          <Input
-            id="bg-color"
-            type="color"
-            value={currentBgColor}
-            onChange={handleBgColorChange}
-            className="w-10 h-10 p-1 cursor-pointer"
-          />
+          <button
+            className="size-8 rounded-md ring-1 ring-border shrink-0 cursor-pointer relative overflow-hidden"
+            onClick={() => {
+              const input = document.getElementById('bg-color-input') as HTMLInputElement
+              input?.click()
+            }}
+            style={{ backgroundColor: currentBgColor }}
+          >
+            <input
+              id="bg-color-input"
+              type="color"
+              value={currentBgColor}
+              onChange={handleBgColorChange}
+              className="absolute inset-0 opacity-0 cursor-pointer"
+            />
+          </button>
           <Input
             type="text"
             value={currentBgColor}
             onChange={handleBgColorChange}
-            className="font-mono text-sm"
+            className="font-mono text-xs h-8"
             maxLength={7}
           />
         </div>
       </div>
 
-      <div>
-        <Button
-          onClick={deleteSelected}
-          variant="destructive"
-          size="sm"
-          className="w-full"
-        >
-          Delete Selected
-        </Button>
-      </div>
+      {/* Delete */}
+      <Button
+        onClick={deleteSelected}
+        variant="ghost"
+        size="sm"
+        className="w-full text-muted-foreground hover:text-destructive gap-1.5"
+      >
+        <Trash2 className="size-3.5" />
+        Delete Selected
+      </Button>
     </div>
   )
 }
