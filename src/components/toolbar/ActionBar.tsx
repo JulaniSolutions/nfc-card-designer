@@ -12,10 +12,10 @@ import { useDesignStore } from '@/store/design-store'
 import { saveDesign } from '@/lib/save-design'
 import { exportDesignAsPdf } from '@/lib/export-pdf'
 import { isSupabaseConfigured } from '@/lib/supabase'
-import { Share2, FileDown, Copy, Check } from 'lucide-react'
+import { Save, Share2, FileDown, Copy, Check } from 'lucide-react'
 
 export function ActionBar() {
-  const { isSaving } = useDesignStore()
+  const { isSaving, designId } = useDesignStore()
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
   const [shareUrl, setShareUrl] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -36,6 +36,20 @@ export function ActionBar() {
         setShareUrl(url)
         setShareDialogOpen(true)
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      useDesignStore.getState().setSaving(false)
+    }
+  }
+
+  const handleUpdate = async () => {
+    if (!isSupabaseConfigured()) return
+
+    try {
+      setError(null)
+      useDesignStore.getState().setSaving(true)
+      await saveDesign()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save')
     } finally {
@@ -74,6 +88,18 @@ export function ActionBar() {
       )}
 
       <div className="flex items-center gap-1.5">
+        {designId && (
+          <Button
+            onClick={handleUpdate}
+            disabled={isSaving}
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+          >
+            <Save className="size-3.5" />
+            {isSaving ? 'Saving...' : 'Update'}
+          </Button>
+        )}
         <Button
           onClick={handleShare}
           disabled={isSaving}
