@@ -8,6 +8,7 @@ function App() {
       <Routes>
         <Route path="/" element={<DesignerPage />} />
         <Route path="/design/:id" element={<SharedDesignPage />} />
+        <Route path="/design/:id/:slug" element={<SharedDesignPage />} />
       </Routes>
     </BrowserRouter>
   )

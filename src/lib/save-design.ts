@@ -13,6 +13,7 @@ function generateShortId(): string {
 export interface SavedDesign {
   id: string
   design_id: string
+  name: string | null
   material_id: string
   variation_id: string
   front_canvas_json: string | null
@@ -30,9 +31,10 @@ export async function saveDesign(): Promise<string | null> {
   }
 
   const state = useDesignStore.getState()
-  const { materialId, variationId, frontCanvasJson, backCanvasJson, frontBgColor, backBgColor, designId } = state
+  const { materialId, variationId, frontCanvasJson, backCanvasJson, frontBgColor, backBgColor, designId, designName } = state
 
   const payload = {
+    name: designName || null,
     material_id: materialId,
     variation_id: variationId,
     front_canvas_json: frontCanvasJson,
@@ -91,6 +93,7 @@ export async function loadDesign(id: string): Promise<boolean> {
     frontBgColor: design.front_bg_color,
     backBgColor: design.back_bg_color,
     designId: design.design_id,
+    designName: design.name || '',
   })
 
   return true

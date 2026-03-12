@@ -18,12 +18,16 @@ export interface DesignState {
   frontBgColor: string
   backBgColor: string
 
+  // Design name
+  designName: string
+
   // Save state
   designId: string | null
   isSaving: boolean
   lastSaved: Date | null
 
   // Actions
+  setDesignName: (name: string) => void
   setMaterial: (materialId: string, variationId: string) => void
   setActiveSide: (side: CardSide) => void
   setCanvasJson: (side: CardSide, json: string) => void
@@ -39,6 +43,7 @@ export interface DesignState {
     frontBgColor: string
     backBgColor: string
     designId: string
+    designName: string
   }) => void
 }
 
@@ -50,9 +55,12 @@ export const useDesignStore = create<DesignState>((set) => ({
   backCanvasJson: null,
   frontBgColor: '#ffffff',
   backBgColor: '#ffffff',
+  designName: '',
   designId: null,
   isSaving: false,
   lastSaved: null,
+
+  setDesignName: (name) => set({ designName: name }),
 
   setMaterial: (materialId, variationId) =>
     set({ materialId, variationId }),
@@ -80,5 +88,6 @@ export const useDesignStore = create<DesignState>((set) => ({
       frontBgColor: data.frontBgColor,
       backBgColor: data.backBgColor,
       designId: data.designId,
+      designName: data.designName,
     }),
 }))

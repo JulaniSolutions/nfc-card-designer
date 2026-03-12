@@ -2,9 +2,12 @@ import { DesignCanvas } from '@/components/canvas/DesignCanvas'
 import { DesignToolbar } from '@/components/toolbar/DesignToolbar'
 import { MaterialSelector } from '@/components/material/MaterialSelector'
 import { ActionBar } from '@/components/toolbar/ActionBar'
+import { useDesignStore } from '@/store/design-store'
 import { CreditCard } from 'lucide-react'
 
 export function DesignerPage() {
+  const designName = useDesignStore((s) => s.designName)
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
@@ -14,6 +17,12 @@ export function DesignerPage() {
           <span className="text-sm font-semibold tracking-tight text-foreground">
             NFC Card Designer
           </span>
+          {designName && (
+            <>
+              <span className="text-muted-foreground/40">/</span>
+              <span className="text-sm text-muted-foreground">{designName}</span>
+            </>
+          )}
         </div>
         <ActionBar />
       </header>

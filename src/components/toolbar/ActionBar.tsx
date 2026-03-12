@@ -8,18 +8,36 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { useDesignStore } from '@/store/design-store'
 import { saveDesign } from '@/lib/save-design'
 import { exportDesignAsPdf } from '@/lib/export-pdf'
 import { isSupabaseConfigured } from '@/lib/supabase'
 import { Save, Share2, FileDown, Copy, Check } from 'lucide-react'
 
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
+function buildShareUrl(id: string, name: string): string {
+  const slug = slugify(name)
+  const path = slug ? `/design/${id}/${slug}` : `/design/${id}`
+  return `${window.location.origin}${path}`
+}
+
 export function ActionBar() {
-  const { isSaving, designId } = useDesignStore()
+  const { isSaving, designId, designName, setDesignName } = useDesignStore()
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
   const [shareUrl, setShareUrl] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [nameInput, setNameInput] = useState('')
 
   const handleShare = async () => {
     if (!isSupabaseConfigured()) {
@@ -27,17 +45,25 @@ export function ActionBar() {
       return
     }
 
+    // Show dialog first so user can enter name before saving
+    setNameInput(designName)
+    setShareDialogOpen(true)
+  }
+
+  const handleConfirmShare = async () => {
     try {
       setError(null)
+      setDesignName(nameInput)
+      // Wait a tick for store to update before saving
+      useDesignStore.getState().designName = nameInput
       useDesignStore.getState().setSaving(true)
       const id = await saveDesign()
       if (id) {
-        const url = `${window.location.origin}/design/${id}`
-        setShareUrl(url)
-        setShareDialogOpen(true)
+        setShareUrl(buildShareUrl(id, nameInput))
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save')
+      setShareDialogOpen(false)
     } finally {
       useDesignStore.getState().setSaving(false)
     }
@@ -108,7 +134,7 @@ export function ActionBar() {
           className="gap-1.5"
         >
           <Share2 className="size-3.5" />
-          {isSaving ? 'Sharing...' : 'Share'}
+          Share
         </Button>
         <Button onClick={handleDownload} variant="outline" size="sm" className="gap-1.5">
           <FileDown className="size-3.5" />
@@ -121,25 +147,53 @@ export function ActionBar() {
           <DialogHeader>
             <DialogTitle>Share Design</DialogTitle>
             <DialogDescription>
-              Anyone with this link can view your card design.
+              {shareUrl
+                ? 'Anyone with this link can view your card design.'
+                : 'Give your design a name, then generate a share link.'}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex gap-2">
-            <Input value={shareUrl} readOnly className="font-mono text-xs" />
-            <Button onClick={copyShareUrl} variant="outline" size="default" className="shrink-0 gap-1.5">
-              {copied ? (
-                <>
-                  <Check className="size-3.5" />
-                  Copied
-                </>
-              ) : (
-                <>
-                  <Copy className="size-3.5" />
-                  Copy
-                </>
-              )}
-            </Button>
-          </div>
+
+          {!shareUrl ? (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="design-name" className="text-xs">
+                  Design name <span className="text-muted-foreground">(optional)</span>
+                </Label>
+                <Input
+                  id="design-name"
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  placeholder="e.g. Business Card v2"
+                  className="text-sm"
+                />
+              </div>
+              <Button
+                onClick={handleConfirmShare}
+                disabled={isSaving}
+                className="w-full"
+                size="sm"
+              >
+                {isSaving ? 'Generating link...' : 'Generate Link'}
+              </Button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <Input value={shareUrl} readOnly className="font-mono text-xs" />
+              <Button onClick={copyShareUrl} variant="outline" size="default" className="shrink-0 gap-1.5">
+                {copied ? (
+                  <>
+                    <Check className="size-3.5" />
+                    Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy className="size-3.5" />
+                    Copy
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </>
