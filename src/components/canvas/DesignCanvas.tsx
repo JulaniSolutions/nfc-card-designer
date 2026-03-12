@@ -3,10 +3,13 @@ import { Canvas, FabricObject, FabricImage } from 'fabric'
 import { CARD_WIDTH, CARD_HEIGHT } from '@/config/canvas'
 import { useDesignStore, type CardSide } from '@/store/design-store'
 import { getVariation } from '@/config/materials'
+import { cn } from '@/lib/utils'
 
 declare global {
   interface Window {
     __fabricCanvas: Canvas | null
+    __fabricCanvasFront: Canvas | null
+    __fabricCanvasBack: Canvas | null
   }
 }
 
@@ -20,36 +23,25 @@ function safeParse(json: string | null): object | null {
   }
 }
 
-export function DesignCanvas() {
+function CardCanvas({ side }: { side: CardSide }) {
   const canvasElRef = useRef<HTMLCanvasElement>(null)
   const canvasRef = useRef<Canvas | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const prevSideRef = useRef<CardSide>('front')
 
   const activeSide = useDesignStore((s) => s.activeSide)
   const variationId = useDesignStore((s) => s.variationId)
-  const frontBgColor = useDesignStore((s) => s.frontBgColor)
-  const backBgColor = useDesignStore((s) => s.backBgColor)
+  const bgColor = useDesignStore((s) => side === 'front' ? s.frontBgColor : s.backBgColor)
   const setCanvasJson = useDesignStore((s) => s.setCanvasJson)
+  const setActiveSide = useDesignStore((s) => s.setActiveSide)
 
-  const bgColor = activeSide === 'front' ? frontBgColor : backBgColor
+  const isActive = activeSide === side
 
-  const makeHandler = useCallback(() => {
-    return () => {
-      const canvas = canvasRef.current
-      if (!canvas) return
-      const json = JSON.stringify(canvas.toJSON())
-      const side = useDesignStore.getState().activeSide
-      setCanvasJson(side, json)
-    }
-  }, [setCanvasJson])
-
-  const saveCurrentState = useCallback(() => {
+  const saveState = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const json = JSON.stringify(canvas.toJSON())
-    setCanvasJson(prevSideRef.current, json)
-  }, [setCanvasJson])
+    setCanvasJson(side, json)
+  }, [setCanvasJson, side])
 
   // Initialize canvas
   useEffect(() => {
@@ -63,15 +55,29 @@ export function DesignCanvas() {
     })
 
     canvasRef.current = canvas
-    window.__fabricCanvas = canvas
 
-    const handler = makeHandler()
+    if (side === 'front') {
+      window.__fabricCanvasFront = canvas
+      window.__fabricCanvas = canvas
+    } else {
+      window.__fabricCanvasBack = canvas
+    }
+
+    const handler = () => saveState()
     canvas.on('object:modified', handler)
     canvas.on('object:added', handler)
     canvas.on('object:removed', handler)
 
+    // Set this canvas as active when clicked
+    canvas.on('mouse:down', () => {
+      window.__fabricCanvas = canvas
+      setActiveSide(side)
+    })
+
+    // Load initial state
     const state = useDesignStore.getState()
-    const parsed = safeParse(state.frontCanvasJson)
+    const json = side === 'front' ? state.frontCanvasJson : state.backCanvasJson
+    const parsed = safeParse(json)
     if (parsed) {
       canvas.loadFromJSON(parsed).then(() => canvas.renderAll()).catch(console.error)
     }
@@ -82,42 +88,13 @@ export function DesignCanvas() {
       canvas.off('object:removed', handler)
       canvas.dispose()
       canvasRef.current = null
-      window.__fabricCanvas = null
+      if (side === 'front') {
+        window.__fabricCanvasFront = null
+      } else {
+        window.__fabricCanvasBack = null
+      }
     }
-  }, [makeHandler])
-
-  // Handle side switching
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    if (prevSideRef.current === activeSide) return
-
-    saveCurrentState()
-
-    const state = useDesignStore.getState()
-    const jsonToLoad = activeSide === 'front' ? state.frontCanvasJson : state.backCanvasJson
-    const parsed = safeParse(jsonToLoad)
-
-    canvas.clear()
-
-    const finalize = () => {
-      const bg = activeSide === 'front'
-        ? useDesignStore.getState().frontBgColor
-        : useDesignStore.getState().backBgColor
-      canvas.backgroundColor = bg
-      canvas.renderAll()
-      prevSideRef.current = activeSide
-    }
-
-    if (parsed) {
-      canvas.loadFromJSON(parsed).then(finalize).catch((err) => {
-        console.error('Failed to load canvas side:', err)
-        finalize()
-      })
-    } else {
-      finalize()
-    }
-  }, [activeSide, saveCurrentState])
+  }, [side, setActiveSide, saveState])
 
   // Update background color
   useEffect(() => {
@@ -127,13 +104,13 @@ export function DesignCanvas() {
     canvas.renderAll()
   }, [bgColor])
 
-  // Apply material background image (switches with side)
+  // Apply material background image
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || !variationId) return
 
     const variation = getVariation(variationId)
-    const imageSrc = activeSide === 'front' ? variation?.frontImage : variation?.backImage
+    const imageSrc = side === 'front' ? variation?.frontImage : variation?.backImage
 
     if (!imageSrc) {
       canvas.backgroundImage = undefined
@@ -157,7 +134,7 @@ export function DesignCanvas() {
       canvas.renderAll()
     }
     imgEl.src = imageSrc
-  }, [variationId, activeSide])
+  }, [variationId, side])
 
   // Responsive scaling
   useEffect(() => {
@@ -183,9 +160,10 @@ export function DesignCanvas() {
     return () => resizeObserver.disconnect()
   }, [])
 
-  // Delete selected object on keypress
+  // Delete selected object on keypress (only if this canvas is active)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isActive) return
       if (e.key === 'Delete' || e.key === 'Backspace') {
         const canvas = canvasRef.current
         if (!canvas) return
@@ -199,27 +177,52 @@ export function DesignCanvas() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [isActive])
 
-  const sideLabel = activeSide === 'front' ? 'Front' : 'Back'
+  const label = side === 'front' ? 'Front' : 'Back'
 
   return (
-    <div className="space-y-3">
-      {/* Side indicator */}
+    <div className="space-y-2">
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-          {sideLabel} Side
+          {label}
         </span>
+        {isActive && (
+          <span className="text-[10px] font-medium text-foreground bg-foreground/5 border border-border rounded px-1.5 py-0.5">
+            Editing
+          </span>
+        )}
+      </div>
+      <div
+        ref={containerRef}
+        className={cn(
+          'w-full overflow-hidden cursor-pointer',
+        )}
+        onClick={() => {
+          window.__fabricCanvas = canvasRef.current
+          setActiveSide(side)
+        }}
+      >
+        <div className={cn(
+          'relative rounded-xl overflow-hidden shadow-md ring-1 transition-all',
+          isActive ? 'ring-foreground/30 shadow-lg' : 'ring-border'
+        )}>
+          <canvas ref={canvasElRef} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function DesignCanvas() {
+  return (
+    <div className="space-y-6">
+      <CardCanvas side="front" />
+      <CardCanvas side="back" />
+      <div className="text-center">
         <span className="text-[11px] text-muted-foreground">
           CR80 — 85.6 × 53.98 mm
         </span>
-      </div>
-
-      {/* Canvas */}
-      <div ref={containerRef} className="w-full overflow-hidden">
-        <div className="relative rounded-xl overflow-hidden shadow-md ring-1 ring-border">
-          <canvas ref={canvasElRef} />
-        </div>
       </div>
     </div>
   )

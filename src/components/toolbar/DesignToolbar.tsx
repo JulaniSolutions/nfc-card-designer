@@ -1,17 +1,16 @@
 import { useDesignStore } from '@/store/design-store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textbox, FabricImage } from 'fabric'
 import { useRef } from 'react'
 import { Type, ImagePlus, Trash2 } from 'lucide-react'
 
 export function DesignToolbar() {
-  const { activeSide, setActiveSide, frontBgColor, backBgColor, setBgColor } =
-    useDesignStore()
+  const { activeSide, frontBgColor, backBgColor, setBgColor } = useDesignStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const currentBgColor = activeSide === 'front' ? frontBgColor : backBgColor
+  const sideLabel = activeSide === 'front' ? 'Front' : 'Back'
 
   const addText = () => {
     const canvas = window.__fabricCanvas
@@ -81,30 +80,13 @@ export function DesignToolbar() {
 
   return (
     <div className="space-y-4">
-      {/* Side switcher */}
-      <div>
-        <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2.5">
-          Card Side
-        </h3>
-        <Tabs
-          value={activeSide}
-          onValueChange={(v) => setActiveSide(v as 'front' | 'back')}
-        >
-          <TabsList className="w-full">
-            <TabsTrigger value="front" className="flex-1 text-xs">
-              Front
-            </TabsTrigger>
-            <TabsTrigger value="back" className="flex-1 text-xs">
-              Back
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
-
       {/* Add elements */}
       <div>
         <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2.5">
           Elements
+          <span className="text-muted-foreground/60 normal-case tracking-normal ml-1">
+            — adds to {sideLabel}
+          </span>
         </h3>
         <div className="flex gap-1.5">
           <Button onClick={addText} variant="outline" size="sm" className="flex-1 gap-1.5">
@@ -134,6 +116,9 @@ export function DesignToolbar() {
       <div>
         <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2.5">
           Background
+          <span className="text-muted-foreground/60 normal-case tracking-normal ml-1">
+            — {sideLabel}
+          </span>
         </h3>
         <div className="flex items-center gap-2">
           <button

@@ -60,10 +60,13 @@ export async function exportDesignAsPdf(): Promise<void> {
     }
   }
 
-  // Save current side state first
-  const currentSide = state.activeSide
-  const currentJson = JSON.stringify(canvas.toJSON())
-  state.setCanvasJson(currentSide, currentJson)
+  // Save both canvases' current state
+  if (window.__fabricCanvasFront) {
+    state.setCanvasJson('front', JSON.stringify(window.__fabricCanvasFront.toJSON()))
+  }
+  if (window.__fabricCanvasBack) {
+    state.setCanvasJson('back', JSON.stringify(window.__fabricCanvasBack.toJSON()))
+  }
 
   const latestState = useDesignStore.getState()
 

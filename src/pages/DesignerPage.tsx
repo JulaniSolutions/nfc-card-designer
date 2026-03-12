@@ -13,11 +13,13 @@ export function DesignerPage() {
 
   const handleNew = () => {
     resetDesign()
-    const canvas = window.__fabricCanvas
-    if (canvas) {
-      canvas.clear()
-      canvas.backgroundColor = '#ffffff'
-      canvas.renderAll()
+    for (const canvas of [window.__fabricCanvasFront, window.__fabricCanvasBack]) {
+      if (canvas) {
+        canvas.clear()
+        canvas.backgroundColor = '#ffffff'
+        canvas.backgroundImage = undefined
+        canvas.renderAll()
+      }
     }
     // Navigate to root if on a shared design URL
     if (window.location.pathname !== '/') {
@@ -62,8 +64,8 @@ export function DesignerPage() {
         </aside>
 
         {/* Canvas area */}
-        <main className="flex-1 order-1 lg:order-2 bg-muted/50 flex items-start lg:items-center justify-center p-6 lg:p-10 overflow-auto">
-          <div className="w-full max-w-[680px]">
+        <main className="flex-1 order-1 lg:order-2 bg-muted/50 flex justify-center p-6 lg:p-8 overflow-auto">
+          <div className="w-full max-w-[580px]">
             <DesignCanvas />
           </div>
         </main>

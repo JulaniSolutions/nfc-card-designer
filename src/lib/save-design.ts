@@ -30,6 +30,15 @@ export async function saveDesign(): Promise<string | null> {
     return null
   }
 
+  // Save both canvases' current state before persisting
+  const storeState = useDesignStore.getState()
+  if (window.__fabricCanvasFront) {
+    storeState.setCanvasJson('front', JSON.stringify(window.__fabricCanvasFront.toJSON()))
+  }
+  if (window.__fabricCanvasBack) {
+    storeState.setCanvasJson('back', JSON.stringify(window.__fabricCanvasBack.toJSON()))
+  }
+
   const state = useDesignStore.getState()
   const { materialId, variationId, frontCanvasJson, backCanvasJson, frontBgColor, backBgColor, designId, designName } = state
 
