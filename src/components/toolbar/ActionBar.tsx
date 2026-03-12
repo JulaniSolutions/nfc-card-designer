@@ -12,16 +12,16 @@ import { useDesignStore } from '@/store/design-store'
 import { saveDesign } from '@/lib/save-design'
 import { exportDesignAsPdf } from '@/lib/export-pdf'
 import { isSupabaseConfigured } from '@/lib/supabase'
-import { Save, Share2, FileDown, Copy, Check } from 'lucide-react'
+import { Share2, FileDown, Copy, Check } from 'lucide-react'
 
 export function ActionBar() {
-  const { isSaving, designId } = useDesignStore()
+  const { isSaving } = useDesignStore()
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
   const [shareUrl, setShareUrl] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
-  const handleSave = async () => {
+  const handleShare = async () => {
     if (!isSupabaseConfigured()) {
       setError('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env')
       return
@@ -34,18 +34,12 @@ export function ActionBar() {
       if (id) {
         const url = `${window.location.origin}/design/${id}`
         setShareUrl(url)
+        setShareDialogOpen(true)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save')
     } finally {
       useDesignStore.getState().setSaving(false)
-    }
-  }
-
-  const handleShare = async () => {
-    await handleSave()
-    if (!error) {
-      setShareDialogOpen(true)
     }
   }
 
@@ -81,18 +75,14 @@ export function ActionBar() {
 
       <div className="flex items-center gap-1.5">
         <Button
-          onClick={handleSave}
+          onClick={handleShare}
           disabled={isSaving}
           variant="outline"
           size="sm"
           className="gap-1.5"
         >
-          <Save className="size-3.5" />
-          {isSaving ? 'Saving...' : designId ? 'Update' : 'Save'}
-        </Button>
-        <Button onClick={handleShare} variant="outline" size="sm" className="gap-1.5">
           <Share2 className="size-3.5" />
-          Share
+          {isSaving ? 'Sharing...' : 'Share'}
         </Button>
         <Button onClick={handleDownload} variant="outline" size="sm" className="gap-1.5">
           <FileDown className="size-3.5" />
