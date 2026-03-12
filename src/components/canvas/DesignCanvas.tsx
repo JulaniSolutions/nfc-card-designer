@@ -1,7 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react'
-import { Canvas, FabricObject } from 'fabric'
+import { Canvas, FabricObject, FabricImage } from 'fabric'
 import { CARD_WIDTH, CARD_HEIGHT } from '@/config/canvas'
 import { useDesignStore, type CardSide } from '@/store/design-store'
+import { getVariation } from '@/config/materials'
 
 declare global {
   interface Window {
@@ -26,6 +27,7 @@ export function DesignCanvas() {
   const prevSideRef = useRef<CardSide>('front')
 
   const activeSide = useDesignStore((s) => s.activeSide)
+  const variationId = useDesignStore((s) => s.variationId)
   const frontBgColor = useDesignStore((s) => s.frontBgColor)
   const backBgColor = useDesignStore((s) => s.backBgColor)
   const setCanvasJson = useDesignStore((s) => s.setCanvasJson)
@@ -124,6 +126,37 @@ export function DesignCanvas() {
     canvas.backgroundColor = bgColor
     canvas.renderAll()
   }, [bgColor])
+
+  // Apply material background image
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !variationId) return
+
+    const variation = getVariation(variationId)
+    if (!variation?.backgroundImage) {
+      canvas.backgroundImage = undefined
+      canvas.renderAll()
+      return
+    }
+
+    const imgEl = new Image()
+    imgEl.onload = () => {
+      const fabricImg = new FabricImage(imgEl, {
+        originX: 'left',
+        originY: 'top',
+      })
+      fabricImg.scaleToWidth(CARD_WIDTH)
+      fabricImg.scaleToHeight(CARD_HEIGHT)
+      canvas.backgroundImage = fabricImg
+      canvas.renderAll()
+    }
+    imgEl.onerror = () => {
+      // Image not found — clear background image silently
+      canvas.backgroundImage = undefined
+      canvas.renderAll()
+    }
+    imgEl.src = variation.backgroundImage
+  }, [variationId])
 
   // Responsive scaling
   useEffect(() => {

@@ -3,6 +3,7 @@ export interface MaterialVariation {
   name: string
   description: string
   colorHint: string // hex color for UI preview swatch
+  backgroundImage?: string // path relative to public/, e.g. '/materials/plastic-standard.jpg'
 }
 
 export interface Material {
@@ -23,12 +24,14 @@ export const materials: Material[] = [
         name: 'Standard',
         description: 'Matte white PVC',
         colorHint: '#f5f5f5',
+        backgroundImage: '/materials/plastic-standard.jpg',
       },
       {
         id: 'plastic-premium',
         name: 'Premium',
         description: 'Glossy finish with rounded edges',
         colorHint: '#e8e8e8',
+        backgroundImage: '/materials/plastic-premium.jpg',
       },
     ],
   },
@@ -42,12 +45,14 @@ export const materials: Material[] = [
         name: 'Natural',
         description: 'Light natural bamboo finish',
         colorHint: '#d4a76a',
+        backgroundImage: '/materials/bamboo-natural.jpg',
       },
       {
         id: 'bamboo-dark',
         name: 'Dark',
         description: 'Carbonised dark bamboo',
         colorHint: '#8b6914',
+        backgroundImage: '/materials/bamboo-dark.jpg',
       },
     ],
   },
@@ -61,18 +66,21 @@ export const materials: Material[] = [
         name: 'Black',
         description: 'Matte black anodised metal',
         colorHint: '#1a1a1a',
+        backgroundImage: '/materials/full-metal-black.jpg',
       },
       {
         id: 'full-metal-silver',
         name: 'Silver',
         description: 'Brushed stainless steel',
         colorHint: '#c0c0c0',
+        backgroundImage: '/materials/full-metal-silver.jpg',
       },
       {
         id: 'full-metal-gold',
         name: 'Gold',
         description: 'Gold-plated stainless steel',
         colorHint: '#d4af37',
+        backgroundImage: '/materials/full-metal-gold.jpg',
       },
     ],
   },
@@ -86,12 +94,14 @@ export const materials: Material[] = [
         name: 'Black',
         description: 'Black metal face with white PVC back',
         colorHint: '#2d2d2d',
+        backgroundImage: '/materials/metal-hybrid-black.jpg',
       },
       {
         id: 'metal-hybrid-silver',
         name: 'Silver',
         description: 'Silver metal face with white PVC back',
         colorHint: '#b8b8b8',
+        backgroundImage: '/materials/metal-hybrid-silver.jpg',
       },
     ],
   },
