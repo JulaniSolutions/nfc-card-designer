@@ -127,13 +127,15 @@ export function DesignCanvas() {
     canvas.renderAll()
   }, [bgColor])
 
-  // Apply material background image
+  // Apply material background image (switches with side)
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || !variationId) return
 
     const variation = getVariation(variationId)
-    if (!variation?.backgroundImage) {
+    const imageSrc = activeSide === 'front' ? variation?.frontImage : variation?.backImage
+
+    if (!imageSrc) {
       canvas.backgroundImage = undefined
       canvas.renderAll()
       return
@@ -151,12 +153,11 @@ export function DesignCanvas() {
       canvas.renderAll()
     }
     imgEl.onerror = () => {
-      // Image not found — clear background image silently
       canvas.backgroundImage = undefined
       canvas.renderAll()
     }
-    imgEl.src = variation.backgroundImage
-  }, [variationId])
+    imgEl.src = imageSrc
+  }, [variationId, activeSide])
 
   // Responsive scaling
   useEffect(() => {

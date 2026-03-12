@@ -50,7 +50,7 @@ export interface DesignState {
 
 export const useDesignStore = create<DesignState>((set) => ({
   materialId: 'plastic',
-  variationId: 'plastic-standard',
+  variationId: 'pvc-white',
   activeSide: 'front',
   frontCanvasJson: null,
   backCanvasJson: null,
@@ -63,7 +63,7 @@ export const useDesignStore = create<DesignState>((set) => ({
 
   resetDesign: () => set({
     materialId: 'plastic',
-    variationId: 'plastic-standard',
+    variationId: 'pvc-white',
     activeSide: 'front',
     frontCanvasJson: null,
     backCanvasJson: null,

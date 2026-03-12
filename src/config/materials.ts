@@ -2,8 +2,9 @@ export interface MaterialVariation {
   id: string
   name: string
   description: string
-  colorHint: string // hex color for UI preview swatch
-  backgroundImage?: string // path relative to public/, e.g. '/materials/plastic-standard.jpg'
+  colorHint: string
+  frontImage?: string
+  backImage?: string
 }
 
 export interface Material {
@@ -20,18 +21,20 @@ export const materials: Material[] = [
     description: 'Lightweight and durable PVC cards',
     variations: [
       {
-        id: 'plastic-standard',
-        name: 'Standard',
+        id: 'pvc-white',
+        name: 'Matte White',
         description: 'Matte white PVC',
         colorHint: '#f5f5f5',
-        backgroundImage: '/materials/plastic-standard.jpg',
+        frontImage: '/materials/pvc-white-front.webp',
+        backImage: '/materials/pvc-white-back.webp',
       },
       {
-        id: 'plastic-premium',
-        name: 'Premium',
-        description: 'Glossy finish with rounded edges',
-        colorHint: '#e8e8e8',
-        backgroundImage: '/materials/plastic-premium.jpg',
+        id: 'pvc-black',
+        name: 'Matte Black',
+        description: 'Matte black PVC',
+        colorHint: '#1a1a1a',
+        frontImage: '/materials/pvc-black-front.webp',
+        backImage: '/materials/pvc-black-back.webp',
       },
     ],
   },
@@ -45,63 +48,39 @@ export const materials: Material[] = [
         name: 'Natural',
         description: 'Light natural bamboo finish',
         colorHint: '#d4a76a',
-        backgroundImage: '/materials/bamboo-natural.jpg',
-      },
-      {
-        id: 'bamboo-dark',
-        name: 'Dark',
-        description: 'Carbonised dark bamboo',
-        colorHint: '#8b6914',
-        backgroundImage: '/materials/bamboo-dark.jpg',
+        frontImage: '/materials/bamboo-front.webp',
+        backImage: '/materials/bamboo-back.webp',
       },
     ],
   },
   {
-    id: 'full-metal',
-    name: 'Full Metal',
+    id: 'metal',
+    name: 'Metal',
     description: 'Premium solid metal cards',
     variations: [
       {
-        id: 'full-metal-black',
-        name: 'Black',
-        description: 'Matte black anodised metal',
+        id: 'metal-black-steel',
+        name: 'Matte Black Steel',
+        description: 'Matte black anodised steel',
         colorHint: '#1a1a1a',
-        backgroundImage: '/materials/full-metal-black.jpg',
+        frontImage: '/materials/metal-black-front.webp',
+        backImage: '/materials/metal-black-back.webp',
       },
       {
-        id: 'full-metal-silver',
-        name: 'Silver',
+        id: 'metal-black-gold',
+        name: 'Matte Black Gold',
+        description: 'Matte black with gold accents',
+        colorHint: '#2d2d2d',
+        frontImage: '/materials/metal-black-front.webp',
+        backImage: '/materials/metal-black-back.webp',
+      },
+      {
+        id: 'metal-brushed-silver',
+        name: 'Brushed Silver',
         description: 'Brushed stainless steel',
         colorHint: '#c0c0c0',
-        backgroundImage: '/materials/full-metal-silver.jpg',
-      },
-      {
-        id: 'full-metal-gold',
-        name: 'Gold',
-        description: 'Gold-plated stainless steel',
-        colorHint: '#d4af37',
-        backgroundImage: '/materials/full-metal-gold.jpg',
-      },
-    ],
-  },
-  {
-    id: 'metal-hybrid',
-    name: 'Metal Hybrid',
-    description: 'Metal front with PVC backing',
-    variations: [
-      {
-        id: 'metal-hybrid-black',
-        name: 'Black',
-        description: 'Black metal face with white PVC back',
-        colorHint: '#2d2d2d',
-        backgroundImage: '/materials/metal-hybrid-black.jpg',
-      },
-      {
-        id: 'metal-hybrid-silver',
-        name: 'Silver',
-        description: 'Silver metal face with white PVC back',
-        colorHint: '#b8b8b8',
-        backgroundImage: '/materials/metal-hybrid-silver.jpg',
+        frontImage: '/materials/metal-bs-front.webp',
+        backImage: '/materials/metal-bs-back.webp',
       },
     ],
   },
