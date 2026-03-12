@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { Canvas, FabricObject, FabricImage } from 'fabric'
-import { CARD_WIDTH, CARD_HEIGHT } from '@/config/canvas'
+import { CARD_WIDTH, CARD_HEIGHT, CARD_CORNER_RADIUS } from '@/config/canvas'
 import { useDesignStore, type CardSide } from '@/store/design-store'
 import { getVariation } from '@/config/materials'
 import { cn } from '@/lib/utils'
@@ -50,7 +50,7 @@ function CardCanvas({ side }: { side: CardSide }) {
     const canvas = new Canvas(canvasElRef.current, {
       width: CARD_WIDTH,
       height: CARD_HEIGHT,
-      backgroundColor: '#ffffff',
+      backgroundColor: 'transparent',
       selection: true,
     })
 
@@ -195,18 +195,19 @@ function CardCanvas({ side }: { side: CardSide }) {
       </div>
       <div
         ref={containerRef}
-        className={cn(
-          'w-full overflow-hidden cursor-pointer',
-        )}
+        className="w-full overflow-hidden cursor-pointer"
         onClick={() => {
           window.__fabricCanvas = canvasRef.current
           setActiveSide(side)
         }}
       >
-        <div className={cn(
-          'relative rounded-xl overflow-hidden shadow-md ring-1 transition-all',
-          isActive ? 'ring-foreground/30 shadow-lg' : 'ring-border'
-        )}>
+        <div
+          className={cn(
+            'relative overflow-hidden shadow-md ring-1 transition-all',
+            isActive ? 'ring-foreground/30 shadow-lg' : 'ring-border'
+          )}
+          style={{ borderRadius: `${CARD_CORNER_RADIUS}px` }}
+        >
           <canvas ref={canvasElRef} />
         </div>
       </div>
