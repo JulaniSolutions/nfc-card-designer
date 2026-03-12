@@ -67,20 +67,17 @@ export async function exportDesignAsPdf(): Promise<void> {
 
   const latestState = useDesignStore.getState()
 
-  const frontDataUrl = await renderSide(
-    latestState.frontCanvasJson,
-    latestState.frontBgColor
-  )
+  const [frontDataUrl, backDataUrl] = await Promise.all([
+    renderSide(latestState.frontCanvasJson, latestState.frontBgColor),
+    renderSide(latestState.backCanvasJson, latestState.backBgColor),
+  ])
+
   pdf.text('Front', pageWidth / 2, y - 4, { align: 'center' })
   pdf.addImage(frontDataUrl, 'PNG', x, y, cardWidthMm, cardHeightMm)
   pdf.setDrawColor(200, 200, 200)
   pdf.roundedRect(x, y, cardWidthMm, cardHeightMm, 2, 2)
 
   pdf.addPage()
-  const backDataUrl = await renderSide(
-    latestState.backCanvasJson,
-    latestState.backBgColor
-  )
   pdf.text('Back', pageWidth / 2, y - 4, { align: 'center' })
   pdf.addImage(backDataUrl, 'PNG', x, y, cardWidthMm, cardHeightMm)
   pdf.roundedRect(x, y, cardWidthMm, cardHeightMm, 2, 2)
