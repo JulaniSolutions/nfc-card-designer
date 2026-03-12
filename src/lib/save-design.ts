@@ -1,6 +1,15 @@
 import { supabase, isSupabaseConfigured } from './supabase'
 import { useDesignStore } from '@/store/design-store'
 
+function generateShortId(): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+  let result = ''
+  for (let i = 0; i < 8; i++) {
+    result += chars[Math.floor(Math.random() * chars.length)]
+  }
+  return result
+}
+
 export interface SavedDesign {
   id: string
   material_id: string
@@ -43,9 +52,10 @@ export async function saveDesign(): Promise<string | null> {
     return designId
   }
 
+  const shortId = generateShortId()
   const { data, error } = await supabase
     .from('designs')
-    .insert(payload)
+    .insert({ id: shortId, ...payload })
     .select('id')
     .single()
 
