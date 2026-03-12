@@ -43,8 +43,8 @@ export interface DesignState {
 }
 
 export const useDesignStore = create<DesignState>((set) => ({
-  materialId: null,
-  variationId: null,
+  materialId: 'plastic',
+  variationId: 'plastic-standard',
   activeSide: 'front',
   frontCanvasJson: null,
   backCanvasJson: null,
