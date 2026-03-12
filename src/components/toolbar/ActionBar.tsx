@@ -136,10 +136,6 @@ export function ActionBar() {
           <Share2 className="size-3.5" />
           Share
         </Button>
-        <Button onClick={handleDownload} variant="outline" size="sm" className="gap-1.5">
-          <FileDown className="size-3.5" />
-          PDF
-        </Button>
       </div>
 
       <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
@@ -167,30 +163,42 @@ export function ActionBar() {
                   className="text-sm"
                 />
               </div>
-              <Button
-                onClick={handleConfirmShare}
-                disabled={isSaving}
-                className="w-full"
-                size="sm"
-              >
-                {isSaving ? 'Generating link...' : 'Generate Link'}
-              </Button>
+              <div className="flex gap-1.5">
+                <Button
+                  onClick={handleConfirmShare}
+                  disabled={isSaving}
+                  className="flex-1"
+                  size="sm"
+                >
+                  {isSaving ? 'Generating link...' : 'Generate Link'}
+                </Button>
+                <Button onClick={handleDownload} variant="outline" size="sm" className="gap-1.5">
+                  <FileDown className="size-3.5" />
+                  PDF
+                </Button>
+              </div>
             </div>
           ) : (
-            <div className="flex gap-2">
-              <Input value={shareUrl} readOnly className="font-mono text-xs" />
-              <Button onClick={copyShareUrl} variant="outline" size="default" className="shrink-0 gap-1.5">
-                {copied ? (
-                  <>
-                    <Check className="size-3.5" />
-                    Copied
-                  </>
-                ) : (
-                  <>
-                    <Copy className="size-3.5" />
-                    Copy
-                  </>
-                )}
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <Input value={shareUrl} readOnly className="font-mono text-xs" />
+                <Button onClick={copyShareUrl} variant="outline" size="default" className="shrink-0 gap-1.5">
+                  {copied ? (
+                    <>
+                      <Check className="size-3.5" />
+                      Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="size-3.5" />
+                      Copy
+                    </>
+                  )}
+                </Button>
+              </div>
+              <Button onClick={handleDownload} variant="outline" size="sm" className="w-full gap-1.5">
+                <FileDown className="size-3.5" />
+                Download PDF
               </Button>
             </div>
           )}
