@@ -27,6 +27,7 @@ export interface DesignState {
   lastSaved: Date | null
 
   // Actions
+  resetDesign: () => void
   setDesignName: (name: string) => void
   setMaterial: (materialId: string, variationId: string) => void
   setActiveSide: (side: CardSide) => void
@@ -59,6 +60,20 @@ export const useDesignStore = create<DesignState>((set) => ({
   designId: null,
   isSaving: false,
   lastSaved: null,
+
+  resetDesign: () => set({
+    materialId: 'plastic',
+    variationId: 'plastic-standard',
+    activeSide: 'front',
+    frontCanvasJson: null,
+    backCanvasJson: null,
+    frontBgColor: '#ffffff',
+    backBgColor: '#ffffff',
+    designName: '',
+    designId: null,
+    isSaving: false,
+    lastSaved: null,
+  }),
 
   setDesignName: (name) => set({ designName: name }),
 

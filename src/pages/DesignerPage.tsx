@@ -3,10 +3,27 @@ import { DesignToolbar } from '@/components/toolbar/DesignToolbar'
 import { MaterialSelector } from '@/components/material/MaterialSelector'
 import { ActionBar } from '@/components/toolbar/ActionBar'
 import { useDesignStore } from '@/store/design-store'
-import { CreditCard } from 'lucide-react'
+import { CreditCard, Plus } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 export function DesignerPage() {
   const designName = useDesignStore((s) => s.designName)
+  const designId = useDesignStore((s) => s.designId)
+  const resetDesign = useDesignStore((s) => s.resetDesign)
+
+  const handleNew = () => {
+    resetDesign()
+    const canvas = window.__fabricCanvas
+    if (canvas) {
+      canvas.clear()
+      canvas.backgroundColor = '#ffffff'
+      canvas.renderAll()
+    }
+    // Navigate to root if on a shared design URL
+    if (window.location.pathname !== '/') {
+      window.history.pushState(null, '', '/')
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -22,6 +39,12 @@ export function DesignerPage() {
               <span className="text-muted-foreground/40">/</span>
               <span className="text-sm text-muted-foreground">{designName}</span>
             </>
+          )}
+          {designId && (
+            <Button onClick={handleNew} variant="ghost" size="xs" className="gap-1 ml-1 text-muted-foreground">
+              <Plus className="size-3" />
+              New
+            </Button>
           )}
         </div>
         <ActionBar />
