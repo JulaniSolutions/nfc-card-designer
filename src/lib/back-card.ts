@@ -113,16 +113,47 @@ function removeAllPlaceholders(canvas: Canvas) {
 }
 
 /**
+ * Find existing QR placeholder position (before removing).
+ */
+function findExistingQrPosition(canvas: Canvas): { left: number; top: number } | null {
+  for (const obj of canvas.getObjects()) {
+    const custom = obj as FabricObject & Record<string, unknown>
+    if (custom[QR_BORDER_TAG]) {
+      return { left: obj.left ?? 0, top: obj.top ?? 0 }
+    }
+  }
+  return null
+}
+
+/**
+ * Find existing name text position (before removing).
+ */
+function findExistingNamePosition(canvas: Canvas): { left: number; top: number } | null {
+  for (const obj of canvas.getObjects()) {
+    const custom = obj as FabricObject & Record<string, unknown>
+    if (custom[NAME_TAG]) {
+      return { left: obj.left ?? 0, top: obj.top ?? 0 }
+    }
+  }
+  return null
+}
+
+/**
  * Add or update the QR code placeholder on the back canvas.
  */
 export function updateQrPlaceholder(canvas: Canvas) {
   const { materialId, backOption } = useDesignStore.getState()
   const color = getColor()
   const size = backOption === 'qr-only' ? QR_BASE_SIZE * 1.1 : QR_BASE_SIZE
-  const pos = getQrPosition(materialId, backOption)
+  const defaultPos = getQrPosition(materialId, backOption)
+
+  // Preserve user-moved position if placeholder already exists
+  const existingPos = findExistingQrPosition(canvas)
 
   // Clear all placeholder objects (tagged + untagged ghosts from serialization)
   removeAllPlaceholders(canvas)
+
+  const pos = existingPos || defaultPos
 
   // Create border
   const border = new Rect({
@@ -177,7 +208,10 @@ export function updateQrPlaceholder(canvas: Canvas) {
 export function updateNameText(canvas: Canvas, name: string) {
   const { backOption } = useDesignStore.getState()
   const color = getColor()
-  const pos = getNamePosition()
+  const defaultPos = getNamePosition()
+
+  // Preserve user-moved position if name text already exists
+  const existingPos = findExistingNamePosition(canvas)
 
   // Clear any leftover name objects (tagged ones — bulk cleanup done in updateQrPlaceholder)
   removeAllByTag(canvas, NAME_TAG)
@@ -187,6 +221,7 @@ export function updateNameText(canvas: Canvas, name: string) {
     return
   }
 
+  const pos = existingPos || defaultPos
   const displayName = name || 'Your Name Here'
 
   const nameObj = new Textbox(displayName, {
