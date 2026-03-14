@@ -70,6 +70,9 @@ export interface DesignState {
     designId: string
     designName: string
     designMethod?: DesignMethod
+    backOption?: BackOption
+    cardNames?: string[]
+    quantity?: number
   }) => void
 }
 
@@ -183,5 +186,8 @@ export const useDesignStore = create<DesignState>((set, get) => ({
       backBgColor: data.backBgColor,
       designId: data.designId,
       designName: data.designName,
+      backOption: data.backOption ?? 'qr-only',
+      cardNames: data.cardNames ?? [''],
+      quantity: data.quantity ?? 1,
     }),
 }))

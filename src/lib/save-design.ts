@@ -18,6 +18,10 @@ export interface SavedDesign {
   back_canvas_json: string | null
   front_bg_color: string
   back_bg_color: string
+  design_method: string
+  back_option: string
+  card_names: string[]
+  quantity: number
   created_at: string
   updated_at: string
 }
@@ -43,7 +47,7 @@ export async function saveDesign(): Promise<string | null> {
   }
 
   const state = useDesignStore.getState()
-  const { materialId, variationId, frontCanvasJson, backCanvasJson, frontBgColor, backBgColor, designId, designName } = state
+  const { materialId, variationId, frontCanvasJson, backCanvasJson, frontBgColor, backBgColor, designId, designName, designMethod, backOption, cardNames, quantity } = state
 
   // Get Turnstile CAPTCHA token
   const turnstileToken = await getTurnstileToken()
@@ -57,6 +61,10 @@ export async function saveDesign(): Promise<string | null> {
     back_canvas_json: backCanvasJson,
     front_bg_color: frontBgColor,
     back_bg_color: backBgColor,
+    design_method: designMethod,
+    back_option: backOption,
+    card_names: cardNames,
+    quantity,
     turnstile_token: turnstileToken,
   }
 
@@ -109,6 +117,10 @@ export async function loadDesign(id: string): Promise<boolean> {
     backBgColor: design.back_bg_color,
     designId: design.design_id,
     designName: design.name || '',
+    designMethod: (design.design_method as 'engraved' | 'printed') || 'printed',
+    backOption: (design.back_option as 'qr-only' | 'qr-name') || 'qr-only',
+    cardNames: design.card_names || [''],
+    quantity: design.quantity || 1,
   })
 
   return true

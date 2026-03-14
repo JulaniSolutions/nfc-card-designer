@@ -102,6 +102,10 @@ Deno.serve(async (req) => {
       back_canvas_json,
       front_bg_color,
       back_bg_color,
+      design_method,
+      back_option,
+      card_names,
+      quantity,
     } = body
 
     // Validate required fields
@@ -139,6 +143,10 @@ Deno.serve(async (req) => {
       back_canvas_json: back_canvas_json || null,
       front_bg_color: front_bg_color || '#ffffff',
       back_bg_color: back_bg_color || '#ffffff',
+      design_method: design_method || 'printed',
+      back_option: back_option || 'qr-only',
+      card_names: card_names || [''],
+      quantity: quantity || 1,
       updated_at: new Date().toISOString(),
     }
 
