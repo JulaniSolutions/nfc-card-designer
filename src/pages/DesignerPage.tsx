@@ -64,8 +64,8 @@ export function DesignerPage() {
         </aside>
 
         {/* Canvas area */}
-        <main className="flex-1 order-1 lg:order-2 bg-muted/50 flex justify-center p-6 lg:p-8 overflow-auto">
-          <div className="w-full max-w-[580px]">
+        <main className="flex-1 order-1 lg:order-2 bg-muted/50 flex p-6 lg:p-8 overflow-auto">
+          <div className="w-full max-w-[580px] mx-auto xl:ml-[calc(50%-290px-110px)] xl:mr-0">
             <DesignCanvas />
           </div>
         </main>

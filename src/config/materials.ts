@@ -5,6 +5,12 @@ export interface MaterialVariation {
   colorHint: string
   frontImage?: string
   backImage?: string
+  /** Color used for engraved designs (laser engraving tint) */
+  engravedColor: string
+  /** Default text/element color in printed mode */
+  defaultPrintColor: string
+  /** Whether this variation is currently in stock (defaults to true) */
+  inStock?: boolean
 }
 
 export interface Material {
@@ -27,6 +33,8 @@ export const materials: Material[] = [
         colorHint: '#f5f5f5',
         frontImage: '/materials/pvc-white-front.webp',
         backImage: '/materials/pvc-white-back.webp',
+        engravedColor: '#000000',
+        defaultPrintColor: '#000000',
       },
       {
         id: 'pvc-black',
@@ -35,6 +43,8 @@ export const materials: Material[] = [
         colorHint: '#1a1a1a',
         frontImage: '/materials/pvc-black-front.webp',
         backImage: '/materials/pvc-black-back.webp',
+        engravedColor: '#FFFFFF',
+        defaultPrintColor: '#FFFFFF',
       },
     ],
   },
@@ -50,6 +60,8 @@ export const materials: Material[] = [
         colorHint: '#d4a76a',
         frontImage: '/materials/bamboo-front.webp',
         backImage: '/materials/bamboo-back.webp',
+        engravedColor: '#000000',
+        defaultPrintColor: '#000000',
       },
     ],
   },
@@ -65,6 +77,8 @@ export const materials: Material[] = [
         colorHint: '#1a1a1a',
         frontImage: '/materials/metal-black-front.webp',
         backImage: '/materials/metal-black-back.webp',
+        engravedColor: '#C0C0C0',
+        defaultPrintColor: '#FFFFFF',
       },
       {
         id: 'metal-black-gold',
@@ -73,6 +87,8 @@ export const materials: Material[] = [
         colorHint: '#2d2d2d',
         frontImage: '/materials/metal-black-front.webp',
         backImage: '/materials/metal-black-back.webp',
+        engravedColor: '#D4AF37',
+        defaultPrintColor: '#FFFFFF',
       },
       {
         id: 'metal-brushed-silver',
@@ -81,6 +97,8 @@ export const materials: Material[] = [
         colorHint: '#c0c0c0',
         frontImage: '/materials/metal-bs-front.webp',
         backImage: '/materials/metal-bs-back.webp',
+        engravedColor: '#808080',
+        defaultPrintColor: '#000000',
       },
     ],
   },

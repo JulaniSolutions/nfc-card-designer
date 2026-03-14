@@ -1,11 +1,45 @@
-import { materials, type Material, type MaterialVariation } from '@/config/materials'
+import { materials, getVariation, type Material, type MaterialVariation } from '@/config/materials'
 import { useDesignStore } from '@/store/design-store'
 import { cn } from '@/lib/utils'
 import { Check } from 'lucide-react'
+import {
+  applyEngravedToCanvas,
+  removeEngravedFromCanvas,
+} from '@/lib/engraved-filters'
+
+function applyFiltersForVariation(variationId: string, method: 'engraved' | 'printed') {
+  const variation = getVariation(variationId)
+  if (!variation) return
+  for (const canvas of [window.__fabricCanvasFront, window.__fabricCanvasBack]) {
+    if (!canvas) continue
+    if (method === 'engraved') {
+      applyEngravedToCanvas(canvas, variation.engravedColor)
+    } else {
+      removeEngravedFromCanvas(canvas, variation.defaultPrintColor)
+    }
+  }
+}
 
 export function MaterialSelector() {
-  const { materialId, variationId, setMaterial } = useDesignStore()
+  const { materialId, variationId, setMaterial, setDesignMethod, designMethod } = useDesignStore()
   const selectedMaterial = materials.find((m) => m.id === materialId)
+
+  const handleMaterialClick = (material: Material) => {
+    // Pick first in-stock variation, or first overall
+    const firstAvailable = material.variations.find((v) => v.inStock !== false) ?? material.variations[0]
+    const newVariationId = firstAvailable.id
+    const newMethod = material.id === 'metal' ? 'engraved' : 'printed'
+    setMaterial(material.id, newVariationId)
+    setDesignMethod(newMethod)
+    applyFiltersForVariation(newVariationId, newMethod)
+  }
+
+  const handleVariationClick = (material: Material, variation: MaterialVariation) => {
+    if (variation.inStock === false) return
+    setMaterial(material.id, variation.id)
+    const currentMethod = material.id === 'metal' ? designMethod : 'printed'
+    applyFiltersForVariation(variation.id, currentMethod)
+  }
 
   return (
     <div className="space-y-4">
@@ -15,14 +49,18 @@ export function MaterialSelector() {
           Material
         </h3>
         <div className="grid grid-cols-2 gap-1.5">
-          {materials.map((material) => (
-            <MaterialChip
-              key={material.id}
-              material={material}
-              selected={materialId === material.id}
-              onClick={() => setMaterial(material.id, material.variations[0].id)}
-            />
-          ))}
+          {materials.map((material) => {
+            const allOutOfStock = material.variations.every((v) => v.inStock === false)
+            return (
+              <MaterialChip
+                key={material.id}
+                material={material}
+                selected={materialId === material.id}
+                disabled={allOutOfStock}
+                onClick={() => !allOutOfStock && handleMaterialClick(material)}
+              />
+            )
+          })}
         </div>
       </div>
 
@@ -38,7 +76,7 @@ export function MaterialSelector() {
                 key={variation.id}
                 variation={variation}
                 selected={variationId === variation.id}
-                onClick={() => setMaterial(selectedMaterial.id, variation.id)}
+                onClick={() => handleVariationClick(selectedMaterial, variation)}
               />
             ))}
           </div>
@@ -51,19 +89,24 @@ export function MaterialSelector() {
 function MaterialChip({
   material,
   selected,
+  disabled,
   onClick,
 }: {
   material: Material
   selected: boolean
+  disabled?: boolean
   onClick: () => void
 }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       className={cn(
         'flex items-center gap-2 rounded-lg border px-3 py-2 text-left transition-colors',
-        'hover:bg-muted/80',
-        selected
+        disabled
+          ? 'opacity-40 cursor-not-allowed'
+          : 'hover:bg-muted/80',
+        selected && !disabled
           ? 'border-foreground bg-foreground/[0.03]'
           : 'border-border bg-card'
       )}
@@ -86,13 +129,18 @@ function VariationRow({
   selected: boolean
   onClick: () => void
 }) {
+  const outOfStock = variation.inStock === false
+
   return (
     <button
       onClick={onClick}
+      disabled={outOfStock}
       className={cn(
         'flex items-center gap-3 w-full rounded-lg px-3 py-2 text-left transition-colors',
-        'hover:bg-muted/80',
-        selected ? 'bg-muted' : 'bg-transparent'
+        outOfStock
+          ? 'opacity-40 cursor-not-allowed'
+          : 'hover:bg-muted/80',
+        selected && !outOfStock ? 'bg-muted' : 'bg-transparent'
       )}
     >
       <div
@@ -100,10 +148,15 @@ function VariationRow({
         style={{ backgroundColor: variation.colorHint }}
       />
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium">{variation.name}</p>
+        <p className="text-xs font-medium">
+          {variation.name}
+          {outOfStock && (
+            <span className="text-[10px] text-muted-foreground ml-1.5">Out of stock</span>
+          )}
+        </p>
         <p className="text-[11px] text-muted-foreground truncate">{variation.description}</p>
       </div>
-      {selected && <Check className="size-3.5 text-foreground shrink-0" />}
+      {selected && !outOfStock && <Check className="size-3.5 text-foreground shrink-0" />}
     </button>
   )
 }
