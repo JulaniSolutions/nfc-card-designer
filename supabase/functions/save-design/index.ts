@@ -5,34 +5,150 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// In-memory IP rate limiting (per edge function instance)
+const ipRequests = new Map<string, number[]>()
+const RATE_LIMIT_WINDOW_MS = 60_000 // 1 minute
+const RATE_LIMIT_MAX = 10 // max 10 saves per minute per IP
+
+const MAX_CANVAS_JSON_BYTES = 512_000 // 500KB per canvas field
+const MAX_BODY_BYTES = 1_200_000 // ~1.1MB total body
+
+function getClientIp(req: Request): string {
+  return (
+    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    req.headers.get('cf-connecting-ip') ||
+    req.headers.get('x-real-ip') ||
+    'unknown'
+  )
+}
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now()
+  const timestamps = ipRequests.get(ip) || []
+  // Remove entries outside the window
+  const recent = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS)
+  if (recent.length >= RATE_LIMIT_MAX) {
+    ipRequests.set(ip, recent)
+    return true
+  }
+  recent.push(now)
+  ipRequests.set(ip, recent)
+  return false
+}
+
+async function verifyTurnstile(token: string): Promise<boolean> {
+  const secret = Deno.env.get('TURNSTILE_SECRET_KEY')
+  if (!secret) return true // Skip if not configured
+
+  const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ secret, response: token }),
+  })
+  const data = await res.json()
+  return data.success === true
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
+    // Rate limit by IP
+    const ip = getClientIp(req)
+    if (isRateLimited(ip)) {
+      return new Response(
+        JSON.stringify({ error: 'Too many requests. Please try again later.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 429 }
+      )
+    }
+
+    // Check body size before parsing
+    const contentLength = req.headers.get('content-length')
+    if (contentLength && parseInt(contentLength) > MAX_BODY_BYTES) {
+      return new Response(
+        JSON.stringify({ error: 'Request too large.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 413 }
+      )
+    }
+
+    const body = await req.json()
+
+    // Verify Turnstile CAPTCHA
+    const turnstileToken = body.turnstile_token
+    if (Deno.env.get('TURNSTILE_SECRET_KEY')) {
+      if (!turnstileToken) {
+        return new Response(
+          JSON.stringify({ error: 'CAPTCHA verification required.' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+        )
+      }
+      const valid = await verifyTurnstile(turnstileToken)
+      if (!valid) {
+        return new Response(
+          JSON.stringify({ error: 'CAPTCHA verification failed.' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+        )
+      }
+    }
+
+    const {
+      design_id,
+      name,
+      material_id,
+      variation_id,
+      front_canvas_json,
+      back_canvas_json,
+      front_bg_color,
+      back_bg_color,
+    } = body
+
+    // Validate required fields
+    if (!material_id || !variation_id) {
+      return new Response(
+        JSON.stringify({ error: 'Missing required fields.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      )
+    }
+
+    // Validate canvas JSON sizes
+    if (front_canvas_json && new TextEncoder().encode(front_canvas_json).length > MAX_CANVAS_JSON_BYTES) {
+      return new Response(
+        JSON.stringify({ error: 'Front canvas data too large.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 413 }
+      )
+    }
+    if (back_canvas_json && new TextEncoder().encode(back_canvas_json).length > MAX_CANVAS_JSON_BYTES) {
+      return new Response(
+        JSON.stringify({ error: 'Back canvas data too large.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 413 }
+      )
+    }
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
-    const body = await req.json()
-    const { id, material_id, variation_id, front_canvas_json, back_canvas_json, front_bg_color, back_bg_color } = body
+    const payload = {
+      name: name || null,
+      material_id,
+      variation_id,
+      front_canvas_json: front_canvas_json || null,
+      back_canvas_json: back_canvas_json || null,
+      front_bg_color: front_bg_color || '#ffffff',
+      back_bg_color: back_bg_color || '#ffffff',
+      updated_at: new Date().toISOString(),
+    }
 
-    if (id) {
+    // Update existing design
+    if (design_id) {
       const { data, error } = await supabase
         .from('designs')
-        .update({
-          material_id,
-          variation_id,
-          front_canvas_json,
-          back_canvas_json,
-          front_bg_color,
-          back_bg_color,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id)
-        .select()
+        .update(payload)
+        .eq('design_id', design_id)
+        .select('design_id')
         .single()
 
       if (error) throw error
@@ -41,17 +157,17 @@ Deno.serve(async (req) => {
       })
     }
 
+    // Generate short ID for new design
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+    let shortId = ''
+    for (let i = 0; i < 8; i++) {
+      shortId += chars[Math.floor(Math.random() * chars.length)]
+    }
+
     const { data, error } = await supabase
       .from('designs')
-      .insert({
-        material_id,
-        variation_id,
-        front_canvas_json,
-        back_canvas_json,
-        front_bg_color,
-        back_bg_color,
-      })
-      .select()
+      .insert({ design_id: shortId, ...payload })
+      .select('design_id')
       .single()
 
     if (error) throw error

@@ -1,14 +1,12 @@
-import { supabase, isSupabaseConfigured } from './supabase'
+import { isSupabaseConfigured, supabase } from './supabase'
 import { useDesignStore } from '@/store/design-store'
+import { getTurnstileToken } from './turnstile'
 
-function generateShortId(): string {
-  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
-  let result = ''
-  for (let i = 0; i < 8; i++) {
-    result += chars[Math.floor(Math.random() * chars.length)]
-  }
-  return result
-}
+const CUSTOM_PROPS = [
+  '_waveIcon', '_isLocked', '_layerLabel', '_isPlaceholder',
+  '_qrPlaceholderBorder', '_qrPlaceholderLabel', '_backNameText',
+  '_designId', '_isOpaque', '_addedInEngraved', '_originalSrc', '_layerType',
+]
 
 export interface SavedDesign {
   id: string
@@ -24,8 +22,13 @@ export interface SavedDesign {
   updated_at: string
 }
 
+function getEdgeFunctionUrl(name: string): string {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
+  return `${supabaseUrl}/functions/v1/${name}`
+}
+
 export async function saveDesign(): Promise<string | null> {
-  if (!isSupabaseConfigured() || !supabase) {
+  if (!isSupabaseConfigured()) {
     console.warn('Supabase not configured — design not saved')
     return null
   }
@@ -33,16 +36,20 @@ export async function saveDesign(): Promise<string | null> {
   // Save both canvases' current state before persisting
   const storeState = useDesignStore.getState()
   if (window.__fabricCanvasFront) {
-    storeState.setCanvasJson('front', JSON.stringify(window.__fabricCanvasFront.toJSON()))
+    storeState.setCanvasJson('front', JSON.stringify(window.__fabricCanvasFront.toObject(CUSTOM_PROPS)))
   }
   if (window.__fabricCanvasBack) {
-    storeState.setCanvasJson('back', JSON.stringify(window.__fabricCanvasBack.toJSON()))
+    storeState.setCanvasJson('back', JSON.stringify(window.__fabricCanvasBack.toObject(CUSTOM_PROPS)))
   }
 
   const state = useDesignStore.getState()
   const { materialId, variationId, frontCanvasJson, backCanvasJson, frontBgColor, backBgColor, designId, designName } = state
 
+  // Get Turnstile CAPTCHA token
+  const turnstileToken = await getTurnstileToken()
+
   const payload = {
+    design_id: designId || undefined,
     name: designName || null,
     material_id: materialId,
     variation_id: variationId,
@@ -50,31 +57,29 @@ export async function saveDesign(): Promise<string | null> {
     back_canvas_json: backCanvasJson,
     front_bg_color: frontBgColor,
     back_bg_color: backBgColor,
-    updated_at: new Date().toISOString(),
+    turnstile_token: turnstileToken,
   }
 
-  if (designId) {
-    const { error } = await supabase
-      .from('designs')
-      .update(payload)
-      .eq('design_id', designId)
+  const res = await fetch(getEdgeFunctionUrl('save-design'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+    },
+    body: JSON.stringify(payload),
+  })
 
-    if (error) throw error
-    state.setLastSaved(new Date())
-    return designId
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Save failed' }))
+    throw new Error(err.error || `Save failed (${res.status})`)
   }
 
-  const shortId = generateShortId()
-  const { data, error } = await supabase
-    .from('designs')
-    .insert({ design_id: shortId, ...payload })
-    .select('design_id')
-    .single()
-
-  if (error) throw error
-
+  const data = await res.json()
   const newId = data.design_id as string
-  state.setDesignId(newId)
+
+  if (!designId) {
+    state.setDesignId(newId)
+  }
   state.setLastSaved(new Date())
   return newId
 }
@@ -85,6 +90,7 @@ export async function loadDesign(id: string): Promise<boolean> {
     return false
   }
 
+  // Reads still go direct — the select policy is public
   const { data, error } = await supabase
     .from('designs')
     .select('*')
