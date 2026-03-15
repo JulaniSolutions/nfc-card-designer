@@ -75,7 +75,7 @@ function buildHtmlEmail(designUrl: string, designName?: string): string {
   <p style="margin:20px 0 0;font-size:12px;color:#aaa;word-break:break-all;">${escapedUrl}</p>
 </td></tr>
 <tr><td style="padding:16px 32px;background:#fafafa;border-top:1px solid #eee;">
-  <p style="margin:0;font-size:11px;color:#aaa;text-align:center;">This email was sent because someone shared a design link via NFC Card Designer.</p>
+  <p style="margin:0;font-size:11px;color:#aaa;text-align:center;">This email was sent because someone shared a design link via <a href="https://nfcdesigner.com" style="color:#aaa;text-decoration:underline;">NFC Card Designer</a>.</p>
 </td></tr>
 </table>
 </td></tr>
@@ -172,7 +172,7 @@ Deno.serve(async (req) => {
         'X-Postmark-Server-Token': postmarkToken,
       },
       body: JSON.stringify({
-        From: fromAddress,
+        From: `NFC Card Designer <${fromAddress}>`,
         To: to_email,
         Subject: subject,
         HtmlBody: buildHtmlEmail(design_url, safeName),
