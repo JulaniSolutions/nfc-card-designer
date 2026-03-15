@@ -13,7 +13,8 @@ import { useDesignStore } from '@/store/design-store'
 import { saveDesign } from '@/lib/save-design'
 import { exportDesignAsPdf } from '@/lib/export-pdf'
 import { isSupabaseConfigured } from '@/lib/supabase'
-import { Save, Share2, FileDown, Copy, Check } from 'lucide-react'
+import { sendDesignEmail } from '@/lib/send-design-email'
+import { Save, Share2, FileDown, Copy, Check, Mail, Loader2 } from 'lucide-react'
 
 function slugify(text: string): string {
   return text
@@ -38,6 +39,10 @@ export function ActionBar() {
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [nameInput, setNameInput] = useState('')
+  const [emailTo, setEmailTo] = useState('')
+  const [emailSending, setEmailSending] = useState(false)
+  const [emailSent, setEmailSent] = useState(false)
+  const [emailError, setEmailError] = useState<string | null>(null)
 
   const handleShare = async () => {
     if (!isSupabaseConfigured()) {
@@ -95,6 +100,24 @@ export function ActionBar() {
     await navigator.clipboard.writeText(shareUrl)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleSendEmail = async () => {
+    if (!emailTo.trim() || emailSending) return
+    try {
+      setEmailError(null)
+      setEmailSending(true)
+      await sendDesignEmail(emailTo.trim(), shareUrl, designName || undefined)
+      setEmailSent(true)
+      setTimeout(() => {
+        setEmailSent(false)
+        setEmailTo('')
+      }, 3000)
+    } catch (err) {
+      setEmailError(err instanceof Error ? err.message : 'Failed to send email')
+    } finally {
+      setEmailSending(false)
+    }
   }
 
   return (
@@ -200,6 +223,50 @@ export function ActionBar() {
                 <FileDown className="size-3.5" />
                 Download PDF
               </Button>
+
+              <div className="relative flex items-center gap-2 pt-1">
+                <div className="flex-1 border-t border-border" />
+                <span className="text-[11px] text-muted-foreground">or email it</span>
+                <div className="flex-1 border-t border-border" />
+              </div>
+
+              <div className="flex gap-2">
+                <Input
+                  type="email"
+                  value={emailTo}
+                  onChange={(e) => { setEmailTo(e.target.value); setEmailError(null) }}
+                  placeholder="recipient@email.com"
+                  className="text-sm"
+                  onKeyDown={(e) => e.key === 'Enter' && handleSendEmail()}
+                />
+                <Button
+                  onClick={handleSendEmail}
+                  disabled={emailSending || !emailTo.trim() || emailSent}
+                  variant="outline"
+                  size="default"
+                  className="shrink-0 gap-1.5"
+                >
+                  {emailSent ? (
+                    <>
+                      <Check className="size-3.5" />
+                      Sent!
+                    </>
+                  ) : emailSending ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" />
+                      Sending
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="size-3.5" />
+                      Send
+                    </>
+                  )}
+                </Button>
+              </div>
+              {emailError && (
+                <p className="text-xs text-destructive">{emailError}</p>
+              )}
             </div>
           )}
         </DialogContent>
