@@ -50,7 +50,12 @@ export function ActionBar() {
       return
     }
 
-    // Show dialog first so user can enter name before saving
+    // Reset dialog state so old links don't persist
+    setShareUrl('')
+    setCopied(false)
+    setEmailTo('')
+    setEmailSent(false)
+    setEmailError(null)
     setNameInput(designName)
     setShareDialogOpen(true)
   }
