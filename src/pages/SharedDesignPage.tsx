@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { loadDesign } from '@/lib/save-design'
 import { isSupabaseConfigured } from '@/lib/supabase'
 import { DesignerPage } from './DesignerPage'
+import { DesignPreview } from '@/components/preview/DesignPreview'
 import { CreditCard, Loader2 } from 'lucide-react'
 
 export function SharedDesignPage() {
@@ -10,8 +11,14 @@ export function SharedDesignPage() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
 
   useEffect(() => {
+    // Reset state when navigating to a different design
+    setLoading(true)
+    setError(null)
+    setEditing(false)
+
     async function load() {
       if (!id) {
         navigate('/')
@@ -67,5 +74,5 @@ export function SharedDesignPage() {
     )
   }
 
-  return <DesignerPage />
+  return editing ? <DesignerPage /> : <DesignPreview onEdit={() => setEditing(true)} />
 }

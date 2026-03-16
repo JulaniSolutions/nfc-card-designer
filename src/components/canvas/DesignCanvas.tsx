@@ -26,6 +26,8 @@ const CUSTOM_PROPS = [
   '_addedInEngraved',
   '_originalSrc',
   '_layerType',
+  '_assetUrl',
+  '_assetName',
 ]
 
 declare global {

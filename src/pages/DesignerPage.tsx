@@ -2,6 +2,7 @@ import { DesignCanvas } from '@/components/canvas/DesignCanvas'
 import { DesignToolbar } from '@/components/toolbar/DesignToolbar'
 import { MaterialSelector } from '@/components/material/MaterialSelector'
 import { ActionBar } from '@/components/toolbar/ActionBar'
+import { RecentDesigns } from '@/components/recent/RecentDesigns'
 import { useDesignStore } from '@/store/design-store'
 import { CreditCard, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -48,6 +49,7 @@ export function DesignerPage() {
               New
             </Button>
           )}
+          <RecentDesigns />
         </div>
         <ActionBar />
       </header>

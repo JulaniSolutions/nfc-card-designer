@@ -1,11 +1,13 @@
 import { isSupabaseConfigured, supabase } from './supabase'
 import { useDesignStore } from '@/store/design-store'
 import { getTurnstileToken } from './turnstile'
+import { addDesignToHistory } from './design-history'
 
 const CUSTOM_PROPS = [
   '_waveIcon', '_isLocked', '_layerLabel', '_isPlaceholder',
   '_qrPlaceholderBorder', '_qrPlaceholderLabel', '_backNameText',
   '_designId', '_isOpaque', '_addedInEngraved', '_originalSrc', '_layerType',
+  '_assetUrl', '_assetName',
 ]
 
 export interface SavedDesign {
@@ -89,6 +91,7 @@ export async function saveDesign(): Promise<string | null> {
     state.setDesignId(newId)
   }
   state.setLastSaved(new Date())
+  addDesignToHistory(newId)
   return newId
 }
 

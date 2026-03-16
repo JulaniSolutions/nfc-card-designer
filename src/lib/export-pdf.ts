@@ -3,6 +3,11 @@ import { Canvas } from 'fabric'
 import { CARD_WIDTH, CARD_HEIGHT } from '@/config/canvas'
 import { useDesignStore } from '@/store/design-store'
 
+const pxToMmX = (px: number, cardWidthMm: number) =>
+  (px / CARD_WIDTH) * cardWidthMm
+const pxToMmY = (px: number, cardHeightMm: number) =>
+  (px / CARD_HEIGHT) * cardHeightMm
+
 export async function exportDesignAsPdf(): Promise<void> {
   const canvas = window.__fabricCanvas
   if (!canvas) throw new Error('Canvas not initialized')
@@ -15,19 +20,13 @@ export async function exportDesignAsPdf(): Promise<void> {
   const pdf = new jsPDF({
     orientation: 'landscape',
     unit: 'mm',
-    format: 'a4',
+    format: [cardWidthMm, cardHeightMm],
   })
-
-  const pageWidth = pdf.internal.pageSize.getWidth()
-  const pageHeight = pdf.internal.pageSize.getHeight()
-
-  const x = (pageWidth - cardWidthMm) / 2
-  const y = (pageHeight - cardHeightMm) / 2
 
   const renderSide = async (
     jsonStr: string | null,
     bgColor: string
-  ): Promise<string> => {
+  ): Promise<void> => {
     const tempCanvasEl = document.createElement('canvas')
     tempCanvasEl.width = CARD_WIDTH
     tempCanvasEl.height = CARD_HEIGHT
@@ -46,13 +45,42 @@ export async function exportDesignAsPdf(): Promise<void> {
       }
       tempCanvas.renderAll()
 
-      const dataUrl = tempCanvas.toDataURL({
-        format: 'png',
-        multiplier: 2,
+      const objects = tempCanvas.getObjects()
+
+      // 1. Render background layer only (bg color + bg image, no design objects) as JPEG
+      objects.forEach((obj) => obj.set('visible', false))
+      tempCanvas.renderAll()
+      const bgDataUrl = tempCanvas.toDataURL({
+        format: 'jpeg',
+        quality: 0.85,
+        multiplier: 1,
       })
+      pdf.addImage(bgDataUrl, 'JPEG', 0, 0, cardWidthMm, cardHeightMm)
+
+      // Restore visibility for individual object rendering
+      objects.forEach((obj) => obj.set('visible', true))
+
+      // 2. Render each object as a separate PDF element (gives layers in Illustrator)
+      for (const obj of objects) {
+        const bounds = obj.getBoundingRect()
+        if (bounds.width < 1 || bounds.height < 1) continue
+
+        const objDataUrl = obj.toDataURL({
+          format: 'png',
+          multiplier: 1,
+        })
+
+        pdf.addImage(
+          objDataUrl,
+          'PNG',
+          pxToMmX(bounds.left, cardWidthMm),
+          pxToMmY(bounds.top, cardHeightMm),
+          pxToMmX(bounds.width, cardWidthMm),
+          pxToMmY(bounds.height, cardHeightMm)
+        )
+      }
 
       tempCanvas.dispose()
-      return dataUrl
     } finally {
       if (tempCanvasEl.parentNode) {
         document.body.removeChild(tempCanvasEl)
@@ -62,28 +90,26 @@ export async function exportDesignAsPdf(): Promise<void> {
 
   // Save both canvases' current state
   if (window.__fabricCanvasFront) {
-    state.setCanvasJson('front', JSON.stringify(window.__fabricCanvasFront.toJSON()))
+    state.setCanvasJson(
+      'front',
+      JSON.stringify(window.__fabricCanvasFront.toJSON())
+    )
   }
   if (window.__fabricCanvasBack) {
-    state.setCanvasJson('back', JSON.stringify(window.__fabricCanvasBack.toJSON()))
+    state.setCanvasJson(
+      'back',
+      JSON.stringify(window.__fabricCanvasBack.toJSON())
+    )
   }
 
   const latestState = useDesignStore.getState()
 
-  const [frontDataUrl, backDataUrl] = await Promise.all([
-    renderSide(latestState.frontCanvasJson, latestState.frontBgColor),
-    renderSide(latestState.backCanvasJson, latestState.backBgColor),
-  ])
+  // Render front side
+  await renderSide(latestState.frontCanvasJson, latestState.frontBgColor)
 
-  pdf.text('Front', pageWidth / 2, y - 4, { align: 'center' })
-  pdf.addImage(frontDataUrl, 'PNG', x, y, cardWidthMm, cardHeightMm)
-  pdf.setDrawColor(200, 200, 200)
-  pdf.roundedRect(x, y, cardWidthMm, cardHeightMm, 2, 2)
-
-  pdf.addPage()
-  pdf.text('Back', pageWidth / 2, y - 4, { align: 'center' })
-  pdf.addImage(backDataUrl, 'PNG', x, y, cardWidthMm, cardHeightMm)
-  pdf.roundedRect(x, y, cardWidthMm, cardHeightMm, 2, 2)
+  // Add second page and render back side
+  pdf.addPage([cardWidthMm, cardHeightMm], 'landscape')
+  await renderSide(latestState.backCanvasJson, latestState.backBgColor)
 
   pdf.save('nfc-card-design.pdf')
 }

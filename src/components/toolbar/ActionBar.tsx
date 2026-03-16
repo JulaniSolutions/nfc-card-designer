@@ -50,13 +50,21 @@ export function ActionBar() {
       return
     }
 
-    // Reset dialog state so old links don't persist
-    setShareUrl('')
+    // Reset dialog state
     setCopied(false)
     setEmailTo('')
     setEmailSent(false)
     setEmailError(null)
     setNameInput(designName)
+
+    // If design was already saved, skip name step — show link immediately
+    if (designId) {
+      setShareUrl(buildShareUrl(designId, designName))
+      setShareDialogOpen(true)
+      return
+    }
+
+    setShareUrl('')
     setShareDialogOpen(true)
   }
 
@@ -100,6 +108,7 @@ export function ActionBar() {
       setError(err instanceof Error ? err.message : 'Failed to export PDF')
     }
   }
+
 
   const copyShareUrl = async () => {
     await navigator.clipboard.writeText(shareUrl)
