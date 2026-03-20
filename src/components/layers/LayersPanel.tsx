@@ -46,42 +46,7 @@ const ALL_WEIGHTS = [
   { value: 700, label: 'Bold' },
 ] as const
 
-// Map of font name → available weights (from the Google Fonts link in index.html)
-const FONT_WEIGHTS: Record<string, number[]> = {
-  'Anton':              [400],
-  'Archivo':            [400, 500, 600, 700],
-  'Arial':              [400, 700],
-  'Bebas Neue':         [400],
-  'Bitter':             [400, 500, 600, 700],
-  'Cabin':              [400, 500, 600, 700],
-  'Cormorant Garamond': [400, 500, 600, 700],
-  'DM Sans':            [400, 500, 600, 700],
-  'DM Serif Display':   [400],
-  'Fira Sans':          [400, 500, 600, 700],
-  'IBM Plex Sans':      [400, 500, 600, 700],
-  'Inter':              [300, 400, 500, 600, 700],
-  'Josefin Sans':       [300, 400, 500, 600, 700],
-  'Kanit':              [400, 500, 600, 700],
-  'Lato':               [300, 400, 700],
-  'Libre Baskerville':  [400, 700],
-  'Merriweather':       [400, 700],
-  'Montserrat':         [300, 400, 500, 600, 700],
-  'Nunito':             [400, 500, 600, 700],
-  'Open Sans':          [300, 400, 500, 600, 700],
-  'Oswald':             [300, 400, 500, 600, 700],
-  'Playfair Display':   [400, 500, 600, 700],
-  'Poppins':            [300, 400, 500, 600, 700],
-  'Quicksand':          [400, 500, 600, 700],
-  'Raleway':            [300, 400, 500, 600, 700],
-  'Roboto':             [300, 400, 500, 700],
-  'Roboto Condensed':   [400, 500, 700],
-  'Roboto Slab':        [400, 500, 600, 700],
-  'Source Sans 3':      [400, 500, 600, 700],
-  'Space Grotesk':      [400, 500, 600, 700],
-  'Work Sans':          [400, 500, 600, 700],
-}
-
-const AVAILABLE_FONTS = Object.keys(FONT_WEIGHTS).sort()
+import { FONT_WEIGHTS, AVAILABLE_FONTS, ensureGoogleFont } from '@/lib/fonts'
 
 function getWeightsForFont(fontFamily: string): typeof ALL_WEIGHTS[number][] {
   const weights = FONT_WEIGHTS[fontFamily] ?? [400]
@@ -468,6 +433,7 @@ function TextLayerControls({
       ? currentWeight
       : availableWeights.reduce((a, b) => Math.abs(b - currentWeight) < Math.abs(a - currentWeight) ? b : a)
     try {
+      await ensureGoogleFont(font, availableWeights)
       await document.fonts.load(`${newWeight} 16px "${font}"`)
     } catch {
       // Font may already be loaded or unavailable — proceed anyway
@@ -483,7 +449,9 @@ function TextLayerControls({
   const handleWeightChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const weight = Number(e.target.value)
     try {
-      await document.fonts.load(`${weight} 16px "${object.fontFamily}"`)
+      const fontName = object.fontFamily as string
+      await ensureGoogleFont(fontName, FONT_WEIGHTS[fontName] ?? [weight])
+      await document.fonts.load(`${weight} 16px "${fontName}"`)
     } catch {
       // proceed anyway
     }

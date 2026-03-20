@@ -13,6 +13,7 @@ import { updateQrPlaceholder, updateVariableTexts, isLockedElement } from '@/lib
 import { addWaveIcon, removeWaveIcon, updateWaveIconColor } from '@/lib/wave-icon'
 import { pushState, undo, redo, isHistoryLocked } from '@/lib/canvas-history'
 import { attachGuides } from '@/lib/canvas-guides'
+import { ensureFontsFromCanvasJson } from '@/lib/fonts'
 
 // Custom properties to preserve through Fabric.js serialization
 const CUSTOM_PROPS = [
@@ -156,7 +157,9 @@ function CardCanvas({ side }: { side: CardSide }) {
     const json = side === 'front' ? state.frontCanvasJson : state.backCanvasJson
     const parsed = safeParse(json)
     if (parsed) {
-      canvas.loadFromJSON(parsed).then(() => canvas.renderAll()).catch(console.error)
+      ensureFontsFromCanvasJson(json).then(() =>
+        canvas.loadFromJSON(parsed).then(() => canvas.renderAll())
+      ).catch(console.error)
     }
 
     return () => {

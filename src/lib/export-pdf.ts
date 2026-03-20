@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf'
 import { Canvas, Textbox, IText, Rect, Group, FabricImage, type FabricObject } from 'fabric'
 import * as fabric from 'fabric'
 import { CARD_WIDTH, CARD_HEIGHT } from '@/config/canvas'
+import { ensureFontsFromCanvasJson } from '@/lib/fonts'
 import { useDesignStore } from '@/store/design-store'
 
 const CUSTOM_PROPS = [
@@ -190,6 +191,7 @@ async function prepareSide(jsonStr: string | null, bgColor: string) {
   })
 
   if (jsonStr) {
+    await ensureFontsFromCanvasJson(jsonStr)
     await tempCanvas.loadFromJSON(JSON.parse(jsonStr))
   }
   tempCanvas.renderAll()
