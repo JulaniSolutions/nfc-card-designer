@@ -658,41 +658,85 @@ function ImageLayerControls({
   const handleRemoveBg = async () => {
     setIsRemoving(true)
     try {
-      const el = object.getElement() as HTMLImageElement
-      const offscreen = document.createElement('canvas')
-      offscreen.width = el.naturalWidth || el.width
-      offscreen.height = el.naturalHeight || el.height
-      const ctx = offscreen.getContext('2d')!
-      ctx.drawImage(el, 0, 0)
-      const dataUrl = offscreen.toDataURL('image/png')
+      // Temporarily strip engraved filters to get the clean original image
+      const hadFilters = object.filters && object.filters.length > 0
+      if (hadFilters) {
+        const savedFilters = [...object.filters!]
+        object.filters = []
+        object.applyFilters()
+        // Now capture the clean image
+        const el = object.getElement() as HTMLImageElement
+        const offscreen = document.createElement('canvas')
+        offscreen.width = el.naturalWidth || el.width
+        offscreen.height = el.naturalHeight || el.height
+        const ctx = offscreen.getContext('2d')!
+        ctx.drawImage(el, 0, 0)
+        const dataUrl = offscreen.toDataURL('image/png')
 
-      // Store original for undo
-      if (!customImg._originalSrc) {
-        customImg._originalSrc = dataUrl
-      }
-
-      const resultUrl = await removeBackground(dataUrl)
-
-      const newImg = new Image()
-      newImg.crossOrigin = 'anonymous'
-      newImg.onload = () => {
-        object.setElement(newImg)
-        object.set({ width: newImg.width, height: newImg.height })
-
-        if (designMethod === 'engraved') {
-          applyEngravedFiltersToImage(object, getCurrentEngravedColor())
+        // Store original for undo (before any processing)
+        if (!customImg._originalSrc) {
+          customImg._originalSrc = dataUrl
         }
 
-        getActiveCanvas()?.renderAll()
-        setIsRemoving(false)
+        // Restore filters while we wait for the API
+        object.filters = savedFilters
+        object.applyFilters()
 
-        onUpdate()
+        const resultUrl = await removeBackground(dataUrl)
+
+        const newImg = new Image()
+        newImg.crossOrigin = 'anonymous'
+        newImg.onload = () => {
+          // Set clean element first, then re-apply engraved filters
+          object.filters = []
+          object.applyFilters()
+          object.setElement(newImg)
+          object.set({ width: newImg.width, height: newImg.height })
+
+          if (designMethod === 'engraved') {
+            applyEngravedFiltersToImage(object, getCurrentEngravedColor())
+          }
+
+          getActiveCanvas()?.renderAll()
+          setIsRemoving(false)
+          onUpdate()
+        }
+        newImg.onerror = () => {
+          setIsRemoving(false)
+          alert('Failed to load processed image.')
+        }
+        newImg.src = resultUrl
+      } else {
+        // No filters — standard flow
+        const el = object.getElement() as HTMLImageElement
+        const offscreen = document.createElement('canvas')
+        offscreen.width = el.naturalWidth || el.width
+        offscreen.height = el.naturalHeight || el.height
+        const ctx = offscreen.getContext('2d')!
+        ctx.drawImage(el, 0, 0)
+        const dataUrl = offscreen.toDataURL('image/png')
+
+        if (!customImg._originalSrc) {
+          customImg._originalSrc = dataUrl
+        }
+
+        const resultUrl = await removeBackground(dataUrl)
+
+        const newImg = new Image()
+        newImg.crossOrigin = 'anonymous'
+        newImg.onload = () => {
+          object.setElement(newImg)
+          object.set({ width: newImg.width, height: newImg.height })
+          getActiveCanvas()?.renderAll()
+          setIsRemoving(false)
+          onUpdate()
+        }
+        newImg.onerror = () => {
+          setIsRemoving(false)
+          alert('Failed to load processed image.')
+        }
+        newImg.src = resultUrl
       }
-      newImg.onerror = () => {
-        setIsRemoving(false)
-        alert('Failed to load processed image.')
-      }
-      newImg.src = resultUrl
     } catch (err) {
       setIsRemoving(false)
       alert(err instanceof Error ? err.message : 'Background removal failed.')
@@ -705,6 +749,9 @@ function ImageLayerControls({
     const restored = new Image()
     restored.crossOrigin = 'anonymous'
     restored.onload = () => {
+      // Clear filters before swapping element to avoid stale cached state
+      object.filters = []
+      object.applyFilters()
       object.setElement(restored)
       object.set({ width: restored.width, height: restored.height })
 
