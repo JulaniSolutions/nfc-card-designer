@@ -2,7 +2,6 @@ import { jsPDF } from 'jspdf'
 import { Canvas, Textbox, IText, Rect, Group, FabricImage, type FabricObject } from 'fabric'
 import * as fabric from 'fabric'
 import { CARD_WIDTH, CARD_HEIGHT } from '@/config/canvas'
-import { toJsPdfFont } from '@/lib/fonts'
 import { useDesignStore } from '@/store/design-store'
 
 const CUSTOM_PROPS = [
@@ -30,62 +29,31 @@ function parseHexColor(hex: string): [number, number, number] {
   ]
 }
 
+/** Rasterize any Fabric object as a high-res PNG into the PDF */
+function renderObjectAsImage(pdf: jsPDF, obj: FabricObject) {
+  const bounds = obj.getBoundingRect()
+  if (bounds.width < 1 || bounds.height < 1) return
+  const dataUrl = obj.toDataURL({ format: 'png', multiplier: 2 })
+  pdf.addImage(
+    dataUrl, 'PNG',
+    pxToMmX(bounds.left, CARD_WIDTH_MM),
+    pxToMmY(bounds.top, CARD_HEIGHT_MM),
+    pxToMmX(bounds.width, CARD_WIDTH_MM),
+    pxToMmY(bounds.height, CARD_HEIGHT_MM),
+  )
+}
+
 function renderTextToPdf(
   pdf: jsPDF,
   textObj: Textbox | IText,
-  posX: number,
-  posY: number,
-  opacity: number,
-  productionMode = false,
+  _posX: number,
+  _posY: number,
+  _opacity: number,
+  _productionMode = false,
 ) {
   const text = textObj.text || ''
   if (!text.trim()) return
-
-  const fontSize = (textObj.fontSize || 34) * (textObj.scaleY || 1)
-  const fontSizeMm = pxToMmY(fontSize, CARD_HEIGHT_MM)
-  const fill = productionMode ? '#000000' : (typeof textObj.fill === 'string' ? textObj.fill : '#000000')
-  const [r, g, b] = parseHexColor(fill)
-
-  const weight = Number(textObj.fontWeight) || 400
-  const fontStyle = weight >= 700 ? 'bold' : 'normal'
-  const pdfFont = toJsPdfFont(textObj.fontFamily || 'Arial')
-
-  pdf.setFont(pdfFont, fontStyle)
-  pdf.setFontSize(fontSizeMm * 2.835) // mm to pt
-  pdf.setTextColor(r, g, b)
-
-  if (opacity < 1) {
-    pdf.setGState(pdf.GState({ opacity }))
-  }
-
-  let x = pxToMmX(posX, CARD_WIDTH_MM)
-  let y = pxToMmY(posY, CARD_HEIGHT_MM)
-
-  const originX = textObj.originX || 'left'
-  const originY = textObj.originY || 'top'
-
-  if (originY === 'center') {
-    y += fontSizeMm * 0.35
-  } else {
-    y += fontSizeMm
-  }
-
-  let align: 'left' | 'center' | 'right' = 'left'
-  if (textObj.textAlign === 'center' || originX === 'center') {
-    align = 'center'
-  } else if (textObj.textAlign === 'right') {
-    align = 'right'
-  }
-
-  const lines = text.split('\n')
-  const lineHeightMm = fontSizeMm * (textObj.lineHeight || 1.16)
-  for (let li = 0; li < lines.length; li++) {
-    pdf.text(lines[li], x, y + li * lineHeightMm, { align })
-  }
-
-  if (opacity < 1) {
-    pdf.setGState(pdf.GState({ opacity: 1 }))
-  }
+  renderObjectAsImage(pdf, textObj)
 }
 
 function renderObjectsToPdf(pdf: jsPDF, objects: FabricObject[], productionMode = false) {
@@ -126,9 +94,9 @@ function renderObjectsToPdf(pdf: jsPDF, objects: FabricObject[], productionMode 
       continue
     }
 
-    // Text objects: render as native PDF text
+    // Text objects: rasterize as image for pixel-perfect font rendering
     if (obj instanceof Textbox || obj instanceof IText) {
-      renderTextToPdf(pdf, obj as Textbox, obj.left || 0, obj.top || 0, obj.opacity ?? 1, productionMode)
+      renderObjectAsImage(pdf, obj)
       continue
     }
 

@@ -1,6 +1,7 @@
 /**
  * Font catalog — system fonts only.
- * All fonts are websafe and map to jsPDF built-in families for clean PDF export.
+ * All websafe, no external loading needed. Text is rasterized in PDF export
+ * so what you see on canvas is exactly what appears in the PDF.
  */
 
 /** Font name → available weights */
@@ -15,11 +16,3 @@ export const FONT_WEIGHTS: Record<string, number[]> = {
 }
 
 export const AVAILABLE_FONTS = Object.keys(FONT_WEIGHTS).sort()
-
-/** Map canvas font family → jsPDF built-in font name */
-export function toJsPdfFont(fontFamily: string): string {
-  const lower = fontFamily.toLowerCase()
-  if (lower.includes('courier')) return 'courier'
-  if (lower.includes('times') || lower.includes('georgia')) return 'times'
-  return 'helvetica'
-}
