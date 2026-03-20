@@ -2,7 +2,7 @@ import { jsPDF } from 'jspdf'
 import { Canvas, Textbox, IText, Rect, Group, FabricImage, type FabricObject } from 'fabric'
 import * as fabric from 'fabric'
 import { CARD_WIDTH, CARD_HEIGHT } from '@/config/canvas'
-import { ensureFontsFromCanvasJson } from '@/lib/fonts'
+import { toJsPdfFont } from '@/lib/fonts'
 import { useDesignStore } from '@/store/design-store'
 
 const CUSTOM_PROPS = [
@@ -30,26 +30,6 @@ function parseHexColor(hex: string): [number, number, number] {
   ]
 }
 
-// jsPDF only has these built-in fonts — everything else must be rasterized
-const JSPDF_FONTS = new Set(['helvetica', 'courier', 'times', 'arial'])
-
-function isNativeFont(fontFamily: string): boolean {
-  return JSPDF_FONTS.has(fontFamily.toLowerCase())
-}
-
-function renderTextAsImage(pdf: jsPDF, textObj: Textbox | IText) {
-  const bounds = textObj.getBoundingRect()
-  if (bounds.width < 1 || bounds.height < 1) return
-  const dataUrl = textObj.toDataURL({ format: 'png', multiplier: 2 })
-  pdf.addImage(
-    dataUrl, 'PNG',
-    pxToMmX(bounds.left, CARD_WIDTH_MM),
-    pxToMmY(bounds.top, CARD_HEIGHT_MM),
-    pxToMmX(bounds.width, CARD_WIDTH_MM),
-    pxToMmY(bounds.height, CARD_HEIGHT_MM),
-  )
-}
-
 function renderTextToPdf(
   pdf: jsPDF,
   textObj: Textbox | IText,
@@ -61,13 +41,6 @@ function renderTextToPdf(
   const text = textObj.text || ''
   if (!text.trim()) return
 
-  // For custom Google Fonts, rasterize as image — jsPDF can't embed them
-  const fontFamily = textObj.fontFamily || 'helvetica'
-  if (!isNativeFont(fontFamily)) {
-    renderTextAsImage(pdf, textObj)
-    return
-  }
-
   const fontSize = (textObj.fontSize || 34) * (textObj.scaleY || 1)
   const fontSizeMm = pxToMmY(fontSize, CARD_HEIGHT_MM)
   const fill = productionMode ? '#000000' : (typeof textObj.fill === 'string' ? textObj.fill : '#000000')
@@ -75,8 +48,9 @@ function renderTextToPdf(
 
   const weight = Number(textObj.fontWeight) || 400
   const fontStyle = weight >= 700 ? 'bold' : 'normal'
+  const pdfFont = toJsPdfFont(textObj.fontFamily || 'Arial')
 
-  pdf.setFont('helvetica', fontStyle)
+  pdf.setFont(pdfFont, fontStyle)
   pdf.setFontSize(fontSizeMm * 2.835) // mm to pt
   pdf.setTextColor(r, g, b)
 
@@ -218,7 +192,6 @@ async function prepareSide(jsonStr: string | null, bgColor: string) {
   })
 
   if (jsonStr) {
-    await ensureFontsFromCanvasJson(jsonStr)
     await tempCanvas.loadFromJSON(JSON.parse(jsonStr))
   }
   tempCanvas.renderAll()

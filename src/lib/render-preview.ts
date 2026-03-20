@@ -1,7 +1,6 @@
 import { Canvas, FabricImage } from 'fabric'
 import { CARD_WIDTH, CARD_HEIGHT } from '@/config/canvas'
 import { getVariation } from '@/config/materials'
-import { ensureFontsFromCanvasJson } from '@/lib/fonts'
 
 const THUMB_WIDTH = 253
 const THUMB_HEIGHT = 160
@@ -48,7 +47,7 @@ export async function renderCanvasToImage(
     }
 
     if (canvasJson) {
-      await ensureFontsFromCanvasJson(canvasJson)
+
       const parsed = JSON.parse(canvasJson)
       await tempCanvas.loadFromJSON(parsed)
     }
@@ -108,7 +107,7 @@ export async function renderThumbnail(
     }
 
     if (canvasJson) {
-      await ensureFontsFromCanvasJson(canvasJson)
+
       const parsed = JSON.parse(canvasJson)
       // Scale objects to fit thumbnail
       const scaleX = THUMB_WIDTH / CARD_WIDTH

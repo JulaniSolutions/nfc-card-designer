@@ -46,7 +46,7 @@ const ALL_WEIGHTS = [
   { value: 700, label: 'Bold' },
 ] as const
 
-import { FONT_WEIGHTS, AVAILABLE_FONTS, ensureGoogleFont } from '@/lib/fonts'
+import { FONT_WEIGHTS, AVAILABLE_FONTS } from '@/lib/fonts'
 
 function getWeightsForFont(fontFamily: string): typeof ALL_WEIGHTS[number][] {
   const weights = FONT_WEIGHTS[fontFamily] ?? [400]
@@ -424,7 +424,7 @@ function TextLayerControls({
     onUpdate()
   }
 
-  const handleFontChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleFontChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const font = e.target.value
     const currentWeight = Number(object.fontWeight) || 400
     const availableWeights = FONT_WEIGHTS[font] ?? [400]
@@ -432,12 +432,6 @@ function TextLayerControls({
     const newWeight = availableWeights.includes(currentWeight)
       ? currentWeight
       : availableWeights.reduce((a, b) => Math.abs(b - currentWeight) < Math.abs(a - currentWeight) ? b : a)
-    try {
-      await ensureGoogleFont(font, availableWeights)
-      await document.fonts.load(`${newWeight} 16px "${font}"`)
-    } catch {
-      // Font may already be loaded or unavailable — proceed anyway
-    }
     object.set('fontFamily', font)
     object.set('fontWeight', newWeight)
     object.initDimensions()
@@ -446,15 +440,8 @@ function TextLayerControls({
     onUpdate()
   }
 
-  const handleWeightChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleWeightChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const weight = Number(e.target.value)
-    try {
-      const fontName = object.fontFamily as string
-      await ensureGoogleFont(fontName, FONT_WEIGHTS[fontName] ?? [weight])
-      await document.fonts.load(`${weight} 16px "${fontName}"`)
-    } catch {
-      // proceed anyway
-    }
     object.set('fontWeight', weight)
     object.initDimensions()
     const canvas = getActiveCanvas()
