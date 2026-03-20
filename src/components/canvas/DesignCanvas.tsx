@@ -398,6 +398,7 @@ export function DesignCanvas() {
   const opaqueImageId = useDesignStore((s) => s.opaqueImageId)
   const setOpaqueWarning = useDesignStore((s) => s.setOpaqueWarning)
   const [cropping, setCropping] = useState(false)
+  const [hasSelection, setHasSelection] = useState(false)
 
   // Sync cropping state
   useEffect(() => {
@@ -406,6 +407,37 @@ export function DesignCanvas() {
     }, 100)
     return () => clearInterval(interval)
   }, [])
+
+  // Track whether any element is selected on the active canvas (for mobile layers)
+  useEffect(() => {
+    const onSelect = () => setHasSelection(true)
+    const onClear = () => setHasSelection(false)
+    const events = ['selection:created', 'selection:updated'] as const
+    const cleanups: Array<() => void> = []
+
+    const bind = () => {
+      for (const canvas of [window.__fabricCanvasFront, window.__fabricCanvasBack]) {
+        if (!canvas) continue
+        for (const ev of events) canvas.on(ev, onSelect)
+        canvas.on('selection:cleared', onClear)
+        cleanups.push(() => {
+          for (const ev of events) canvas.off(ev, onSelect)
+          canvas.off('selection:cleared', onClear)
+        })
+      }
+    }
+    bind()
+    const timer = setTimeout(bind, 500)
+
+    // Check initial state
+    const activeCanvas = activeSide === 'front' ? window.__fabricCanvasFront : window.__fabricCanvasBack
+    setHasSelection(!!activeCanvas?.getActiveObject())
+
+    return () => {
+      clearTimeout(timer)
+      cleanups.forEach((c) => c())
+    }
+  }, [activeSide])
 
   const targetImage = getOpaqueImage(opaqueImageId)
 
@@ -418,14 +450,16 @@ export function DesignCanvas() {
     </div>
   )
 
-  // Mobile layers + elements panel (rendered after the active card)
+  // Mobile layers + elements panel (only when an element is selected)
   const mobileLayersPanel = !cropping && (
     <div className="xl:hidden">
-      <div className="bg-card border border-border rounded-lg p-3 shadow-sm space-y-3">
-        <LayersPanel />
-        <div className="pt-1 border-t border-border">
-          <AddElementButtons />
+      {hasSelection && (
+        <div className="bg-card border border-border rounded-lg p-3 shadow-sm space-y-3">
+          <LayersPanel />
         </div>
+      )}
+      <div className="bg-card border border-border rounded-lg p-3 shadow-sm mt-3">
+        <AddElementButtons />
       </div>
     </div>
   )

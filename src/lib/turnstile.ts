@@ -12,7 +12,7 @@ function loadScript(): Promise<void> {
     return Promise.resolve()
   }
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const script = document.createElement('script')
     script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
     script.async = true
@@ -20,7 +20,10 @@ function loadScript(): Promise<void> {
       scriptLoaded = true
       resolve()
     }
-    script.onerror = () => reject(new Error('Failed to load Turnstile script'))
+    // Brave and other privacy browsers may silently block the script
+    // without firing onerror — use a timeout as a fallback
+    script.onerror = () => resolve()
+    setTimeout(() => resolve(), 3000)
     document.head.appendChild(script)
   })
 }
