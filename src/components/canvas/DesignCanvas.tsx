@@ -5,7 +5,7 @@ import { useDesignStore, type CardSide } from '@/store/design-store'
 import { getVariation } from '@/config/materials'
 import { cn } from '@/lib/utils'
 import { LayersPanel } from '@/components/layers/LayersPanel'
-import { AddElementButtons } from '@/components/toolbar/DesignToolbar'
+import { MobileAddElements } from '@/components/toolbar/DesignToolbar'
 import { CropActionBar } from '@/components/canvas/CropActionBar'
 import { TransparencyWarning, type WarningState } from '@/components/canvas/TransparencyWarning'
 import { isCropping } from '@/lib/crop-tool'
@@ -458,16 +458,11 @@ export function DesignCanvas() {
     </div>
   )
 
-  // Mobile layers + elements panel (only when an element is selected)
-  const mobileLayersPanel = !cropping && (
+  // Mobile layers panel (only when an element is selected)
+  const mobileLayersPanel = !cropping && hasSelection && (
     <div className="xl:hidden">
-      {hasSelection && (
-        <div className="bg-card border border-border rounded-lg p-3 shadow-sm space-y-3">
-          <LayersPanel />
-        </div>
-      )}
-      <div className="bg-card border border-border rounded-lg p-3 shadow-sm mt-3">
-        <AddElementButtons />
+      <div className="bg-card border border-border rounded-lg p-3 shadow-sm space-y-3">
+        <LayersPanel />
       </div>
     </div>
   )
@@ -504,6 +499,9 @@ export function DesignCanvas() {
 
       {/* Mobile layers panel — after back card when back is active */}
       {activeSide === 'back' && mobileLayersPanel}
+
+      {/* Mobile add elements — always visible below both canvases */}
+      {!cropping && <MobileAddElements />}
 
       <div className="text-center">
         <span className="text-[11px] text-muted-foreground">
