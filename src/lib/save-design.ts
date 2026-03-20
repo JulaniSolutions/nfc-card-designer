@@ -2,12 +2,15 @@ import { isSupabaseConfigured, supabase } from './supabase'
 import { useDesignStore } from '@/store/design-store'
 import { getTurnstileToken } from './turnstile'
 import { addDesignToHistory } from './design-history'
+import { uploadOriginalAsset } from './upload-asset'
+import { FabricImage } from 'fabric'
 
 const CUSTOM_PROPS = [
   '_waveIcon', '_isLocked', '_layerLabel', '_isPlaceholder',
   '_qrPlaceholderBorder', '_qrPlaceholderLabel', '_backNameText',
+  '_variableId',
   '_designId', '_isOpaque', '_addedInEngraved', '_originalSrc', '_layerType',
-  '_assetUrl', '_assetName',
+  '_assetUrl', '_assetName', '_undeletable',
 ]
 
 export interface SavedDesign {
@@ -23,6 +26,8 @@ export interface SavedDesign {
   design_method: string
   back_option: string
   card_names: string[]
+  variable_fields: { id: string; label: string }[] | null
+  card_data: Record<string, string>[] | null
   quantity: number
   created_at: string
   updated_at: string
@@ -48,8 +53,41 @@ export async function saveDesign(): Promise<string | null> {
     storeState.setCanvasJson('back', JSON.stringify(window.__fabricCanvasBack.toObject(CUSTOM_PROPS)))
   }
 
+  // Upload any images that haven't been uploaded to Storage yet
+  for (const canvas of [window.__fabricCanvasFront, window.__fabricCanvasBack]) {
+    if (!canvas) continue
+    for (const obj of canvas.getObjects()) {
+      const tagged = obj as FabricImage & { _assetUrl?: string; _assetName?: string; _designId?: string }
+      if (obj instanceof FabricImage && tagged._designId && !tagged._assetUrl) {
+        // Extract image data and upload
+        const el = (obj as FabricImage).getElement() as HTMLImageElement
+        const offscreen = document.createElement('canvas')
+        offscreen.width = el.naturalWidth || el.width
+        offscreen.height = el.naturalHeight || el.height
+        const ctx = offscreen.getContext('2d')!
+        ctx.drawImage(el, 0, 0)
+        const blob = await new Promise<Blob | null>((r) => offscreen.toBlob(r, 'image/png'))
+        if (blob) {
+          const file = new File([blob], tagged._assetName || 'image.png', { type: 'image/png' })
+          const asset = await uploadOriginalAsset(file)
+          if (asset) {
+            tagged._assetUrl = asset.url
+          }
+        }
+      }
+    }
+  }
+
+  // Re-save canvas JSON after asset URLs have been added
+  if (window.__fabricCanvasFront) {
+    storeState.setCanvasJson('front', JSON.stringify(window.__fabricCanvasFront.toObject(CUSTOM_PROPS)))
+  }
+  if (window.__fabricCanvasBack) {
+    storeState.setCanvasJson('back', JSON.stringify(window.__fabricCanvasBack.toObject(CUSTOM_PROPS)))
+  }
+
   const state = useDesignStore.getState()
-  const { materialId, variationId, frontCanvasJson, backCanvasJson, frontBgColor, backBgColor, designId, designName, designMethod, backOption, cardNames, quantity } = state
+  const { materialId, variationId, frontCanvasJson, backCanvasJson, frontBgColor, backBgColor, designId, designName, designMethod, backOption, cardNames, variableFields, cardData, quantity } = state
 
   // Get Turnstile CAPTCHA token
   const turnstileToken = await getTurnstileToken()
@@ -65,7 +103,9 @@ export async function saveDesign(): Promise<string | null> {
     back_bg_color: backBgColor,
     design_method: designMethod,
     back_option: backOption,
-    card_names: cardNames,
+    card_names: cardNames, // backward compat
+    variable_fields: variableFields,
+    card_data: cardData,
     quantity,
     turnstile_token: turnstileToken,
   }
@@ -123,6 +163,8 @@ export async function loadDesign(id: string): Promise<boolean> {
     designMethod: (design.design_method as 'engraved' | 'printed') || 'printed',
     backOption: (design.back_option as 'qr-only' | 'qr-name') || 'qr-only',
     cardNames: design.card_names || [''],
+    variableFields: design.variable_fields || undefined,
+    cardData: design.card_data || undefined,
     quantity: design.quantity || 1,
   })
 

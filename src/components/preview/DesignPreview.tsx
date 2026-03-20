@@ -3,8 +3,9 @@ import { useDesignStore } from '@/store/design-store'
 import { getMaterial, getVariation } from '@/config/materials'
 import { CARD_CORNER_RADIUS } from '@/config/canvas'
 import { renderCanvasToImage } from '@/lib/render-preview'
-import { Loader2, Pencil } from 'lucide-react'
+import { Loader2, Pencil, FileDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { exportDesignAsPdf } from '@/lib/export-pdf'
 
 interface DesignPreviewProps {
   onEdit: () => void
@@ -20,6 +21,10 @@ export function DesignPreview({ onEdit }: DesignPreviewProps) {
     materialId,
     designName,
     designMethod,
+    backOption,
+    variableFields,
+    cardData,
+    quantity,
   } = useDesignStore()
 
   const [frontImage, setFrontImage] = useState<string | null>(null)
@@ -105,9 +110,58 @@ export function DesignPreview({ onEdit }: DesignPreviewProps) {
           </div>
         </div>
 
-        {/* Edit button */}
-        <div className="flex justify-center">
-          <Button size="lg" onClick={onEdit} className="gap-2">
+        {/* Card variables */}
+        {backOption === 'qr-name' && cardData.length > 0 && (
+          <div className="max-w-xl mx-auto">
+            <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3 text-center">
+              Card Details — {quantity} {quantity === 1 ? 'card' : 'cards'}
+            </h2>
+            <div className="border border-border rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50">
+                    <th className="text-left text-xs font-medium text-muted-foreground px-4 py-2 w-8">#</th>
+                    {variableFields.map((field) => (
+                      <th key={field.id} className="text-left text-xs font-medium text-muted-foreground px-4 py-2">
+                        {field.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {cardData.map((row, i) => (
+                    <tr key={i} className="border-b border-border last:border-b-0">
+                      <td className="text-xs text-muted-foreground px-4 py-2">{i + 1}</td>
+                      {variableFields.map((field) => (
+                        <td key={field.id} className="px-4 py-2 text-foreground">
+                          {row[field.id] || <span className="text-muted-foreground/40">—</span>}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex justify-center gap-3">
+          <Button
+            size="lg"
+            className="gap-2"
+            onClick={async () => {
+              try {
+                await exportDesignAsPdf()
+              } catch (err) {
+                alert(err instanceof Error ? err.message : 'Failed to export PDF')
+              }
+            }}
+          >
+            <FileDown className="size-4" />
+            Download PDF
+          </Button>
+          <Button size="lg" variant="outline" onClick={onEdit} className="gap-2">
             <Pencil className="size-4" />
             Edit Design
           </Button>

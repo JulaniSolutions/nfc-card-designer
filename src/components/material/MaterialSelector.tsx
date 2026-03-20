@@ -5,15 +5,31 @@ import { Check } from 'lucide-react'
 import {
   applyEngravedToCanvas,
   removeEngravedFromCanvas,
+  resetColorsForMaterialSwitch,
 } from '@/lib/engraved-filters'
 
-function applyFiltersForVariation(variationId: string, method: 'engraved' | 'printed') {
-  const variation = getVariation(variationId)
+function applyFiltersForVariation(
+  newVariationId: string,
+  method: 'engraved' | 'printed',
+  oldVariationId?: string | null,
+) {
+  const variation = getVariation(newVariationId)
   if (!variation) return
+
+  const oldVariation = oldVariationId ? getVariation(oldVariationId) : null
+
   for (const canvas of [window.__fabricCanvasFront, window.__fabricCanvasBack]) {
     if (!canvas) continue
     if (method === 'engraved') {
       applyEngravedToCanvas(canvas, variation.engravedColor)
+    } else if (oldVariation) {
+      // Smart reset: update text whose color matches the old material's default or engraved color
+      resetColorsForMaterialSwitch(
+        canvas,
+        oldVariation.defaultPrintColor,
+        oldVariation.engravedColor,
+        variation.defaultPrintColor,
+      )
     } else {
       removeEngravedFromCanvas(canvas, variation.defaultPrintColor)
     }
@@ -29,16 +45,18 @@ export function MaterialSelector() {
     const firstAvailable = material.variations.find((v) => v.inStock !== false) ?? material.variations[0]
     const newVariationId = firstAvailable.id
     const newMethod = material.id === 'metal' ? 'engraved' : 'printed'
+    const oldVarId = variationId
     setMaterial(material.id, newVariationId)
     setDesignMethod(newMethod)
-    applyFiltersForVariation(newVariationId, newMethod)
+    applyFiltersForVariation(newVariationId, newMethod, oldVarId)
   }
 
   const handleVariationClick = (material: Material, variation: MaterialVariation) => {
     if (variation.inStock === false) return
+    const oldVarId = variationId
     setMaterial(material.id, variation.id)
     const currentMethod = material.id === 'metal' ? designMethod : 'printed'
-    applyFiltersForVariation(variation.id, currentMethod)
+    applyFiltersForVariation(variation.id, currentMethod, oldVarId)
   }
 
   return (
@@ -102,7 +120,7 @@ function MaterialChip({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        'flex items-center gap-2 rounded-lg border px-3 py-2 text-left transition-colors',
+        'flex items-center justify-center rounded-lg border px-3 py-2 text-left transition-colors',
         disabled
           ? 'opacity-40 cursor-not-allowed'
           : 'hover:bg-muted/80',
@@ -111,10 +129,6 @@ function MaterialChip({
           : 'border-border bg-card'
       )}
     >
-      <div
-        className="size-3 rounded-full ring-1 ring-border shrink-0"
-        style={{ backgroundColor: material.variations[0].colorHint }}
-      />
       <span className="text-xs font-medium truncate">{material.name}</span>
     </button>
   )
@@ -143,10 +157,18 @@ function VariationRow({
         selected && !outOfStock ? 'bg-muted' : 'bg-transparent'
       )}
     >
-      <div
-        className="size-5 rounded-md ring-1 ring-border shrink-0"
-        style={{ backgroundColor: variation.colorHint }}
-      />
+      {variation.swatch ? (
+        <img
+          src={variation.swatch}
+          alt={variation.name}
+          className="size-8 rounded-md ring-1 ring-border shrink-0 object-cover"
+        />
+      ) : (
+        <div
+          className="size-8 rounded-md ring-1 ring-border shrink-0"
+          style={{ backgroundColor: variation.colorHint }}
+        />
+      )}
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium">
           {variation.name}

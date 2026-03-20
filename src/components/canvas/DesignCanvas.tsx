@@ -1,16 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Canvas, FabricObject, FabricImage } from 'fabric'
+import { Canvas, FabricObject, FabricImage, InteractiveFabricObject } from 'fabric'
 import { CARD_WIDTH, CARD_HEIGHT, CARD_CORNER_RADIUS } from '@/config/canvas'
 import { useDesignStore, type CardSide } from '@/store/design-store'
 import { getVariation } from '@/config/materials'
 import { cn } from '@/lib/utils'
 import { LayersPanel } from '@/components/layers/LayersPanel'
+import { AddElementButtons } from '@/components/toolbar/DesignToolbar'
 import { CropActionBar } from '@/components/canvas/CropActionBar'
 import { TransparencyWarning, type WarningState } from '@/components/canvas/TransparencyWarning'
 import { isCropping } from '@/lib/crop-tool'
-import { updateQrPlaceholder, updateNameText, isLockedElement } from '@/lib/back-card'
+import { updateQrPlaceholder, updateVariableTexts, isLockedElement } from '@/lib/back-card'
 import { addWaveIcon, removeWaveIcon, updateWaveIconColor } from '@/lib/wave-icon'
 import { pushState, undo, redo, isHistoryLocked } from '@/lib/canvas-history'
+import { attachGuides } from '@/lib/canvas-guides'
 
 // Custom properties to preserve through Fabric.js serialization
 const CUSTOM_PROPS = [
@@ -21,6 +23,7 @@ const CUSTOM_PROPS = [
   '_qrPlaceholderBorder',
   '_qrPlaceholderLabel',
   '_backNameText',
+  '_variableId',
   '_designId',
   '_isOpaque',
   '_addedInEngraved',
@@ -28,7 +31,20 @@ const CUSTOM_PROPS = [
   '_layerType',
   '_assetUrl',
   '_assetName',
+  '_undeletable',
 ]
+
+// Make selection controls more visible on light backgrounds
+InteractiveFabricObject.ownDefaults = {
+  ...InteractiveFabricObject.ownDefaults,
+  borderColor: '#2563eb',
+  cornerColor: '#2563eb',
+  cornerStrokeColor: '#ffffff',
+  cornerStyle: 'circle' as const,
+  cornerSize: 10,
+  borderScaleFactor: 1.5,
+  transparentCorners: false,
+}
 
 declare global {
   interface Window {
@@ -60,7 +76,8 @@ function CardCanvas({ side }: { side: CardSide }) {
   const setCanvasJson = useDesignStore((s) => s.setCanvasJson)
   const setActiveSide = useDesignStore((s) => s.setActiveSide)
   const backOption = useDesignStore((s) => s.backOption)
-  const cardNames = useDesignStore((s) => s.cardNames)
+  const variableFields = useDesignStore((s) => s.variableFields)
+  const cardData = useDesignStore((s) => s.cardData)
 
   const isActive = activeSide === side
   const suppressSaveRef = useRef(false)
@@ -78,11 +95,14 @@ function CardCanvas({ side }: { side: CardSide }) {
   useEffect(() => {
     if (!canvasElRef.current) return
 
+    const isTouchDevice = window.matchMedia('(pointer: coarse)').matches
+
     const canvas = new Canvas(canvasElRef.current, {
       width: CARD_WIDTH,
       height: CARD_HEIGHT,
       backgroundColor: 'transparent',
-      selection: true,
+      selection: !isTouchDevice,
+      allowTouchScrolling: isTouchDevice,
     })
 
     canvasRef.current = canvas
@@ -94,10 +114,15 @@ function CardCanvas({ side }: { side: CardSide }) {
       window.__fabricCanvasBack = canvas
     }
 
+
+    // Attach guide lines + snapping
+    const detachGuides = attachGuides(canvas)
+
     // Save initial state for undo
     pushState(canvas, CUSTOM_PROPS)
 
     const handler = () => {
+      if (suppressSaveRef.current) return
       saveState()
       pushState(canvas, CUSTOM_PROPS)
     }
@@ -111,6 +136,21 @@ function CardCanvas({ side }: { side: CardSide }) {
       setActiveSide(side)
     })
 
+    // Prevent page scroll when entering text editing mode
+    // Fabric creates a hidden textarea that the browser tries to scroll into view
+    canvas.on('text:editing:entered', ({ target }) => {
+      const scrollX = window.scrollX
+      const scrollY = window.scrollY
+      const textObj = target as FabricObject & { hiddenTextarea?: HTMLTextAreaElement }
+      if (textObj.hiddenTextarea) {
+        textObj.hiddenTextarea.style.position = 'fixed'
+        textObj.hiddenTextarea.style.top = '0px'
+        textObj.hiddenTextarea.style.left = '0px'
+        textObj.hiddenTextarea.style.opacity = '0'
+      }
+      requestAnimationFrame(() => window.scrollTo(scrollX, scrollY))
+    })
+
     // Load initial state
     const state = useDesignStore.getState()
     const json = side === 'front' ? state.frontCanvasJson : state.backCanvasJson
@@ -120,6 +160,7 @@ function CardCanvas({ side }: { side: CardSide }) {
     }
 
     return () => {
+      detachGuides()
       canvas.off('object:modified', handler)
       canvas.off('object:added', handler)
       canvas.off('object:removed', handler)
@@ -161,8 +202,11 @@ function CardCanvas({ side }: { side: CardSide }) {
         originX: 'left',
         originY: 'top',
       })
-      fabricImg.scaleToWidth(CARD_WIDTH)
-      fabricImg.scaleToHeight(CARD_HEIGHT)
+      // Set scale explicitly to cover the full canvas — avoids sub-pixel gaps
+      fabricImg.set({
+        scaleX: CARD_WIDTH / imgEl.naturalWidth,
+        scaleY: CARD_HEIGHT / imgEl.naturalHeight,
+      })
       canvas.backgroundImage = fabricImg
       canvas.renderAll()
     }
@@ -173,18 +217,16 @@ function CardCanvas({ side }: { side: CardSide }) {
     imgEl.src = imageSrc
   }, [variationId, side])
 
-  // Back canvas: QR placeholder + name text
+  // Back canvas: QR placeholder + variable texts
   useEffect(() => {
     if (side !== 'back') return
     const canvas = canvasRef.current
     if (!canvas) return
-    // Suppress saveState during placeholder updates to avoid serialization
-    // of objects without custom tags (Fabric toJSON strips them)
     suppressSaveRef.current = true
     updateQrPlaceholder(canvas)
-    updateNameText(canvas, cardNames[0] || '')
+    updateVariableTexts(canvas, variableFields, cardData)
     suppressSaveRef.current = false
-  }, [side, backOption, variationId, materialId, cardNames])
+  }, [side, backOption, variationId, materialId, variableFields, cardData])
 
   // Front canvas: wave/NFC icon for plastic and bamboo
   useEffect(() => {
@@ -254,7 +296,8 @@ function CardCanvas({ side }: { side: CardSide }) {
         const canvas = canvasRef.current
         if (!canvas) return
         const active = canvas.getActiveObject()
-        if (active && !(active as FabricObject & { isEditing?: boolean }).isEditing && !isLockedElement(active)) {
+        const isUndeletable = !!(active as FabricObject & { _undeletable?: boolean })?._undeletable
+        if (active && !(active as FabricObject & { isEditing?: boolean }).isEditing && !isLockedElement(active) && !isUndeletable) {
           canvas.remove(active)
           canvas.discardActiveObject()
           canvas.renderAll()
@@ -294,17 +337,20 @@ function CardCanvas({ side }: { side: CardSide }) {
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           {label}
         </span>
-        {isActive && (
-          <span className="text-[10px] font-medium text-foreground bg-foreground/5 border border-border rounded px-1.5 py-0.5">
-            Editing
-          </span>
-        )}
+        <span className={cn(
+          "text-[10px] font-medium rounded px-1.5 py-0.5 border transition-opacity",
+          isActive
+            ? "text-foreground bg-foreground/5 border-border opacity-100"
+            : "border-transparent opacity-0"
+        )}>
+          Editing
+        </span>
       </div>
       <div
         ref={containerRef}
         className={cn(
           'w-full overflow-hidden cursor-pointer border transition-all relative',
-          isActive ? 'border-foreground/30 shadow-lg' : 'border-border shadow-md'
+          isActive ? 'border-foreground/30 shadow-md' : 'border-border shadow-md'
         )}
         style={{ borderRadius: `${CARD_CORNER_RADIUS}px` }}
         onClick={() => {
@@ -322,7 +368,7 @@ function CardCanvas({ side }: { side: CardSide }) {
             style={{ opacity: 0.35 }}
           >
             <span
-              className="text-2xl font-semibold tracking-[0.2em] uppercase"
+              className="text-base sm:text-2xl font-semibold tracking-[0.2em] uppercase"
               style={{ color: placeholderColor }}
             >
               Add your design
@@ -363,7 +409,8 @@ export function DesignCanvas() {
 
   const targetImage = getOpaqueImage(opaqueImageId)
 
-  const layersFloating = (
+  // Floating layers panel — anchored to the active card on xl screens
+  const layersFloating = !cropping && (
     <div className="absolute top-0 left-[calc(100%+16px)] w-[220px] hidden xl:block">
       <div className="bg-card border border-border rounded-lg p-3 shadow-sm">
         <LayersPanel />
@@ -371,10 +418,14 @@ export function DesignCanvas() {
     </div>
   )
 
-  const layersInline = (
-    <div className="xl:hidden mt-3">
-      <div className="bg-card border border-border rounded-lg p-3 shadow-sm">
+  // Mobile layers + elements panel (rendered after the active card)
+  const mobileLayersPanel = !cropping && (
+    <div className="xl:hidden">
+      <div className="bg-card border border-border rounded-lg p-3 shadow-sm space-y-3">
         <LayersPanel />
+        <div className="pt-1 border-t border-border">
+          <AddElementButtons />
+        </div>
       </div>
     </div>
   )
@@ -395,25 +446,23 @@ export function DesignCanvas() {
         {activeSide === 'front' && cropping && (
           <CropActionBar onDone={() => setCropping(false)} />
         )}
-        {activeSide === 'front' && !cropping && (
-          <>
-            {layersFloating}
-            {layersInline}
-          </>
-        )}
+        {activeSide === 'front' && layersFloating}
       </div>
+
+      {/* Mobile layers panel — after front card when front is active */}
+      {activeSide === 'front' && mobileLayersPanel}
+
       <div className="relative">
         <CardCanvas side="back" />
         {activeSide === 'back' && cropping && (
           <CropActionBar onDone={() => setCropping(false)} />
         )}
-        {activeSide === 'back' && !cropping && (
-          <>
-            {layersFloating}
-            {layersInline}
-          </>
-        )}
+        {activeSide === 'back' && layersFloating}
       </div>
+
+      {/* Mobile layers panel — after back card when back is active */}
+      {activeSide === 'back' && mobileLayersPanel}
+
       <div className="text-center">
         <span className="text-[11px] text-muted-foreground">
           CR80 — 85.6 × 53.98 mm

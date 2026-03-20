@@ -4,6 +4,15 @@ export type CardSide = 'front' | 'back'
 export type DesignMethod = 'engraved' | 'printed'
 export type BackOption = 'qr-only' | 'qr-name'
 
+export interface VariableField {
+  id: string
+  label: string
+}
+
+export type CardData = Record<string, string>[]
+
+const DEFAULT_NAME_FIELD: VariableField = { id: 'name', label: 'Name' }
+
 export interface DesignState {
   // Material selection
   materialId: string | null
@@ -31,7 +40,9 @@ export interface DesignState {
 
   // Back of card
   backOption: BackOption
-  cardNames: string[]
+  cardNames: string[] // kept for backward compat
+  variableFields: VariableField[]
+  cardData: CardData
   quantity: number
 
   // Transparency warning
@@ -42,6 +53,7 @@ export interface DesignState {
   designId: string | null
   isSaving: boolean
   lastSaved: Date | null
+  hasUnsavedChanges: boolean
 
   // Actions
   resetDesign: () => void
@@ -58,6 +70,11 @@ export interface DesignState {
   setBackOption: (option: BackOption) => void
   setQuantity: (qty: number) => void
   setCardName: (index: number, name: string) => void
+  addVariable: (label: string) => void
+  removeVariable: (id: string) => void
+  renameVariable: (id: string, label: string) => void
+  removeCard: (cardIndex: number) => void
+  setCardValue: (cardIndex: number, variableId: string, value: string) => void
   savePrintColor: (objectId: string, color: string) => void
   getPrintColor: (objectId: string) => string | undefined
   loadDesign: (data: {
@@ -72,8 +89,14 @@ export interface DesignState {
     designMethod?: DesignMethod
     backOption?: BackOption
     cardNames?: string[]
+    variableFields?: VariableField[]
+    cardData?: CardData
     quantity?: number
   }) => void
+}
+
+function deriveCardNames(cardData: CardData): string[] {
+  return cardData.map((row) => row['name'] || '')
 }
 
 export const useDesignStore = create<DesignState>((set, get) => ({
@@ -89,12 +112,15 @@ export const useDesignStore = create<DesignState>((set, get) => ({
   designName: '',
   backOption: 'qr-only' as BackOption,
   cardNames: [''],
+  variableFields: [{ ...DEFAULT_NAME_FIELD }],
+  cardData: [{ name: '' }],
   quantity: 1,
   opaqueImageWarning: null,
   opaqueImageId: null,
   designId: null,
   isSaving: false,
   lastSaved: null,
+  hasUnsavedChanges: false,
 
   resetDesign: () => set({
     materialId: 'plastic',
@@ -109,12 +135,15 @@ export const useDesignStore = create<DesignState>((set, get) => ({
     designName: '',
     backOption: 'qr-only' as BackOption,
     cardNames: [''],
+    variableFields: [{ ...DEFAULT_NAME_FIELD }],
+    cardData: [{ name: '' }],
     quantity: 1,
     opaqueImageWarning: null,
     opaqueImageId: null,
     designId: null,
     isSaving: false,
     lastSaved: null,
+    hasUnsavedChanges: false,
   }),
 
   setOpaqueWarning: (state, imageId) => set({
@@ -130,39 +159,120 @@ export const useDesignStore = create<DesignState>((set, get) => ({
     if (materialId !== 'metal') {
       updates.designMethod = 'printed'
     }
+    if (get().designId) updates.hasUnsavedChanges = true
     set(updates)
   },
 
-  setDesignMethod: (method) => set({ designMethod: method }),
+  setDesignMethod: (method) => {
+    const updates: Partial<DesignState> = { designMethod: method }
+    if (get().designId) updates.hasUnsavedChanges = true
+    set(updates)
+  },
 
   setActiveSide: (side) => set({ activeSide: side }),
 
-  setCanvasJson: (side, json) =>
-    set(side === 'front' ? { frontCanvasJson: json } : { backCanvasJson: json }),
+  setCanvasJson: (side, json) => {
+    const updates: Partial<DesignState> = side === 'front' ? { frontCanvasJson: json } : { backCanvasJson: json }
+    if (get().designId) updates.hasUnsavedChanges = true
+    set(updates)
+  },
 
-  setBgColor: (side, color) =>
-    set(side === 'front' ? { frontBgColor: color } : { backBgColor: color }),
+  setBgColor: (side, color) => {
+    const updates: Partial<DesignState> = side === 'front' ? { frontBgColor: color } : { backBgColor: color }
+    if (get().designId) updates.hasUnsavedChanges = true
+    set(updates)
+  },
 
   setDesignId: (id) => set({ designId: id }),
 
   setSaving: (saving) => set({ isSaving: saving }),
 
-  setLastSaved: (date) => set({ lastSaved: date }),
+  setLastSaved: (date) => set({ lastSaved: date, hasUnsavedChanges: false }),
 
-  setBackOption: (option) => set({ backOption: option }),
+  setBackOption: (option) => {
+    const updates: Partial<DesignState> = { backOption: option }
+    if (get().designId) updates.hasUnsavedChanges = true
+    set(updates)
+  },
 
   setQuantity: (qty) => {
-    const current = get().cardNames
-    const names = [...current]
-    // Grow or shrink the names array
-    while (names.length < qty) names.push('')
-    set({ quantity: qty, cardNames: names.slice(0, qty) })
+    const { cardData, variableFields } = get()
+    const newData = [...cardData]
+    // Grow: add empty rows
+    while (newData.length < qty) {
+      const emptyRow: Record<string, string> = {}
+      for (const field of variableFields) {
+        emptyRow[field.id] = ''
+      }
+      newData.push(emptyRow)
+    }
+    // Shrink
+    const trimmed = newData.slice(0, qty)
+    const updates: Partial<DesignState> = { quantity: qty, cardData: trimmed, cardNames: deriveCardNames(trimmed) }
+    if (get().designId) updates.hasUnsavedChanges = true
+    set(updates)
   },
 
   setCardName: (index, name) => {
-    const names = [...get().cardNames]
-    names[index] = name
-    set({ cardNames: names })
+    const cardData = [...get().cardData]
+    if (!cardData[index]) cardData[index] = {}
+    cardData[index] = { ...cardData[index], name }
+    const updates: Partial<DesignState> = { cardData, cardNames: deriveCardNames(cardData) }
+    if (get().designId) updates.hasUnsavedChanges = true
+    set(updates)
+  },
+
+  addVariable: (label: string) => {
+    const id = crypto.randomUUID()
+    const { variableFields, cardData, designId } = get()
+    const newFields = [...variableFields, { id, label }]
+    const newData = cardData.map((row) => ({ ...row, [id]: '' }))
+    const updates: Partial<DesignState> = { variableFields: newFields, cardData: newData }
+    if (designId) updates.hasUnsavedChanges = true
+    set(updates)
+  },
+
+  removeVariable: (id: string) => {
+    if (id === 'name') return // Can't remove Name
+    const { variableFields, cardData, designId } = get()
+    const newFields = variableFields.filter((f) => f.id !== id)
+    const newData = cardData.map((row) => {
+      const { [id]: _, ...rest } = row
+      return rest
+    })
+    const updates: Partial<DesignState> = { variableFields: newFields, cardData: newData }
+    if (designId) updates.hasUnsavedChanges = true
+    set(updates)
+  },
+
+  renameVariable: (id: string, label: string) => {
+    const { variableFields, designId } = get()
+    const newFields = variableFields.map((f) =>
+      f.id === id ? { ...f, label } : f
+    )
+    const updates: Partial<DesignState> = { variableFields: newFields }
+    if (designId) updates.hasUnsavedChanges = true
+    set(updates)
+  },
+
+  removeCard: (cardIndex: number) => {
+    const { cardData, quantity } = get()
+    if (quantity <= 1) return // Must keep at least 1 card
+    const newData = cardData.filter((_, i) => i !== cardIndex)
+    set({ cardData: newData, quantity: newData.length, cardNames: deriveCardNames(newData) })
+  },
+
+  setCardValue: (cardIndex: number, variableId: string, value: string) => {
+    const cardData = [...get().cardData]
+    if (!cardData[cardIndex]) cardData[cardIndex] = {}
+    cardData[cardIndex] = { ...cardData[cardIndex], [variableId]: value }
+    const updates: Partial<DesignState> = { cardData }
+    // Keep cardNames in sync
+    if (variableId === 'name') {
+      updates.cardNames = deriveCardNames(cardData)
+    }
+    if (get().designId) updates.hasUnsavedChanges = true
+    set(updates)
   },
 
   savePrintColor: (objectId, color) => {
@@ -175,7 +285,22 @@ export const useDesignStore = create<DesignState>((set, get) => ({
     return get().savedPrintColors.get(objectId)
   },
 
-  loadDesign: (data) =>
+  loadDesign: (data) => {
+    // Migrate legacy designs: if cardData not present, build from cardNames
+    let variableFields = data.variableFields
+    let cardData = data.cardData
+    const cardNames = data.cardNames ?? ['']
+    const quantity = data.quantity ?? 1
+
+    if (!cardData || cardData.length === 0) {
+      // Legacy design — migrate cardNames to structured data
+      variableFields = [{ ...DEFAULT_NAME_FIELD }]
+      cardData = cardNames.map((name) => ({ name }))
+    }
+    if (!variableFields || variableFields.length === 0) {
+      variableFields = [{ ...DEFAULT_NAME_FIELD }]
+    }
+
     set({
       materialId: data.materialId,
       variationId: data.variationId,
@@ -187,7 +312,11 @@ export const useDesignStore = create<DesignState>((set, get) => ({
       designId: data.designId,
       designName: data.designName,
       backOption: data.backOption ?? 'qr-only',
-      cardNames: data.cardNames ?? [''],
-      quantity: data.quantity ?? 1,
-    }),
+      cardNames,
+      variableFields,
+      cardData,
+      quantity,
+      hasUnsavedChanges: false,
+    })
+  },
 }))

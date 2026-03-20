@@ -51,20 +51,46 @@ export async function getTurnstileToken(): Promise<string | null> {
     container.style.display = 'none'
     document.body.appendChild(container)
 
+    let resolved = false
+    const cleanup = () => {
+      if (container.parentNode) document.body.removeChild(container)
+    }
+
+    // Timeout after 5s — skip CAPTCHA rather than hang forever
+    const timer = setTimeout(() => {
+      if (!resolved) {
+        resolved = true
+        cleanup()
+        resolve(null)
+      }
+    }, 5000)
+
     turnstile.render(container, {
       sitekey: TURNSTILE_SITE_KEY,
       size: 'invisible',
       callback: (token: string) => {
-        document.body.removeChild(container)
-        resolve(token)
+        if (!resolved) {
+          resolved = true
+          clearTimeout(timer)
+          cleanup()
+          resolve(token)
+        }
       },
       'error-callback': () => {
-        document.body.removeChild(container)
-        resolve(null)
+        if (!resolved) {
+          resolved = true
+          clearTimeout(timer)
+          cleanup()
+          resolve(null)
+        }
       },
       'expired-callback': () => {
-        document.body.removeChild(container)
-        resolve(null)
+        if (!resolved) {
+          resolved = true
+          clearTimeout(timer)
+          cleanup()
+          resolve(null)
+        }
       },
     })
   })

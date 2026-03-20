@@ -3,7 +3,7 @@ import { CARD_WIDTH } from '@/config/canvas'
 
 const WAVE_ICON_TAG = '_waveIcon'
 const WAVE_ICON_SIZE = 48
-const WAVE_MARGIN = 40
+const WAVE_MARGIN = 60
 
 /**
  * Check if a wave icon already exists on the canvas.

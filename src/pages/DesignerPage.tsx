@@ -4,21 +4,23 @@ import { MaterialSelector } from '@/components/material/MaterialSelector'
 import { ActionBar } from '@/components/toolbar/ActionBar'
 import { RecentDesigns } from '@/components/recent/RecentDesigns'
 import { useDesignStore } from '@/store/design-store'
-import { CreditCard, Plus } from 'lucide-react'
+import { CreditCard, Plus, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 export function DesignerPage() {
   const designName = useDesignStore((s) => s.designName)
   const designId = useDesignStore((s) => s.designId)
+  const isSaving = useDesignStore((s) => s.isSaving)
   const resetDesign = useDesignStore((s) => s.resetDesign)
 
   const handleNew = () => {
+    // Briefly null out the variation to force effects to re-fire after reset
+    useDesignStore.getState().setMaterial('', '')
     resetDesign()
     for (const canvas of [window.__fabricCanvasFront, window.__fabricCanvasBack]) {
       if (canvas) {
-        canvas.clear()
+        canvas.getObjects().slice().forEach((obj) => canvas.remove(obj))
         canvas.backgroundColor = '#ffffff'
-        canvas.backgroundImage = undefined
         canvas.renderAll()
       }
     }
@@ -29,36 +31,63 @@ export function DesignerPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col relative">
+      {/* Saving overlay — only for Update (designId exists), not Generate Link */}
+      {isSaving && designId && (
+        <div className="fixed inset-0 z-50 bg-background/60 backdrop-blur-sm flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="size-5 text-foreground animate-spin" />
+            <p className="text-sm text-muted-foreground">Saving design...</p>
+          </div>
+        </div>
+      )}
       {/* Header */}
-      <header className="h-14 border-b border-border bg-card flex items-center justify-between px-5 shrink-0">
-        <div className="flex items-center gap-2.5">
-          <CreditCard className="size-5 text-foreground" />
-          <span className="text-sm font-semibold tracking-tight text-foreground">
-            NFC Card Designer
-          </span>
-          {designName && (
-            <>
-              <span className="text-muted-foreground/40">/</span>
-              <span className="text-sm text-muted-foreground">{designName}</span>
-            </>
-          )}
-          {designId && (
-            <Button onClick={handleNew} variant="ghost" size="xs" className="gap-1 ml-1 text-muted-foreground">
+      <header className="border-b border-border bg-card shrink-0 sticky top-0 z-40 lg:relative">
+        <div className="h-14 flex items-center justify-between px-5">
+          <div className="flex items-center gap-2.5">
+            <CreditCard className="size-5 text-foreground" />
+            <span className="text-sm font-semibold tracking-tight text-foreground">
+              NFC Card Designer
+            </span>
+            {/* Desktop only: design name, new, recent */}
+            <div className="hidden lg:contents">
+              {designName && (
+                <>
+                  <span className="text-muted-foreground/40">/</span>
+                  <span className="text-sm text-muted-foreground">{designName}</span>
+                </>
+              )}
+              {designId && (
+                <Button onClick={handleNew} variant="ghost" size="xs" className="gap-1 ml-1 text-muted-foreground">
+                  <Plus className="size-3" />
+                  New
+                </Button>
+              )}
+              <RecentDesigns />
+            </div>
+          </div>
+          <ActionBar />
+        </div>
+        {/* Mobile sub-bar: design name, new, recent */}
+        {designId && (
+          <div className="flex items-center gap-2 px-5 pb-2.5 -mt-1 lg:hidden">
+            {designName && (
+              <span className="text-xs text-muted-foreground truncate">{designName}</span>
+            )}
+            <Button onClick={handleNew} variant="ghost" size="xs" className="gap-1 text-muted-foreground shrink-0">
               <Plus className="size-3" />
               New
             </Button>
-          )}
-          <RecentDesigns />
-        </div>
-        <ActionBar />
+            <RecentDesigns />
+          </div>
+        )}
       </header>
 
       {/* Main content */}
       <div className="flex-1 flex flex-col lg:flex-row min-h-0">
         {/* Sidebar */}
         <aside className="w-full lg:w-[280px] border-b lg:border-b-0 lg:border-r border-border bg-card overflow-y-auto order-2 lg:order-1">
-          <div className="p-4 space-y-5">
+          <div className="p-4 pb-20 lg:pb-8 space-y-5">
             <MaterialSelector />
             <div className="h-px bg-border" />
             <DesignToolbar />

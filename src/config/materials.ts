@@ -9,6 +9,8 @@ export interface MaterialVariation {
   engravedColor: string
   /** Default text/element color in printed mode */
   defaultPrintColor: string
+  /** Swatch image for the finish selector */
+  swatch?: string
   /** Whether this variation is currently in stock (defaults to true) */
   inStock?: boolean
 }
@@ -35,6 +37,7 @@ export const materials: Material[] = [
         backImage: '/materials/pvc-white-back.webp',
         engravedColor: '#000000',
         defaultPrintColor: '#000000',
+        swatch: '/materials/swatch-pvc-white.webp',
       },
       {
         id: 'pvc-black',
@@ -45,6 +48,7 @@ export const materials: Material[] = [
         backImage: '/materials/pvc-black-back.webp',
         engravedColor: '#FFFFFF',
         defaultPrintColor: '#FFFFFF',
+        swatch: '/materials/swatch-pvc-black.png',
       },
     ],
   },
@@ -62,6 +66,7 @@ export const materials: Material[] = [
         backImage: '/materials/bamboo-back.webp',
         engravedColor: '#000000',
         defaultPrintColor: '#000000',
+        swatch: '/materials/swatch-bamboo-natural.webp',
       },
     ],
   },
@@ -79,6 +84,7 @@ export const materials: Material[] = [
         backImage: '/materials/metal-black-back.webp',
         engravedColor: '#C0C0C0',
         defaultPrintColor: '#FFFFFF',
+        swatch: '/materials/swatch-metal-black-steel.webp',
       },
       {
         id: 'metal-black-gold',
@@ -89,6 +95,7 @@ export const materials: Material[] = [
         backImage: '/materials/metal-black-back.webp',
         engravedColor: '#D4AF37',
         defaultPrintColor: '#FFFFFF',
+        swatch: '/materials/swatch-metal-black-gold.webp',
       },
       {
         id: 'metal-brushed-silver',
@@ -97,8 +104,9 @@ export const materials: Material[] = [
         colorHint: '#c0c0c0',
         frontImage: '/materials/metal-bs-front.webp',
         backImage: '/materials/metal-bs-back.webp',
-        engravedColor: '#808080',
+        engravedColor: '#505050',
         defaultPrintColor: '#000000',
+        swatch: '/materials/swatch-metal-brushed-silver.webp',
       },
     ],
   },

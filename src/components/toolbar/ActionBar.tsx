@@ -33,7 +33,7 @@ function buildShareUrl(id: string, name: string): string {
 }
 
 export function ActionBar() {
-  const { isSaving, designId, designName, setDesignName } = useDesignStore()
+  const { isSaving, designId, designName, setDesignName, hasUnsavedChanges } = useDesignStore()
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
   const [shareUrl, setShareUrl] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -87,13 +87,23 @@ export function ActionBar() {
     }
   }
 
-  const handleUpdate = async () => {
+  const handleSaveChanges = async () => {
     if (!isSupabaseConfigured()) return
 
     try {
       setError(null)
       useDesignStore.getState().setSaving(true)
       await saveDesign()
+      // Open share dialog after successful save
+      const { designId: id, designName: name } = useDesignStore.getState()
+      if (id) {
+        setCopied(false)
+        setEmailTo('')
+        setEmailSent(false)
+        setEmailError(null)
+        setShareUrl(buildShareUrl(id, name))
+        setShareDialogOpen(true)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save')
     } finally {
@@ -151,38 +161,39 @@ export function ActionBar() {
       )}
 
       <div className="flex items-center gap-1.5">
-        {designId && (
+        {designId && hasUnsavedChanges ? (
           <Button
-            onClick={handleUpdate}
+            onClick={handleSaveChanges}
             disabled={isSaving}
             variant="outline"
             size="sm"
             className="gap-1.5"
           >
             <Save className="size-3.5" />
-            {isSaving ? 'Saving...' : 'Update'}
+            {isSaving ? 'Saving...' : 'Save Changes'}
+          </Button>
+        ) : (
+          <Button
+            onClick={handleShare}
+            disabled={isSaving}
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+          >
+            <Share2 className="size-3.5" />
+            Share
           </Button>
         )}
-        <Button
-          onClick={handleShare}
-          disabled={isSaving}
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-        >
-          <Share2 className="size-3.5" />
-          Share
-        </Button>
       </div>
 
       <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Share Design</DialogTitle>
             <DialogDescription>
               {shareUrl
                 ? 'Anyone with this link can view your card design.'
-                : 'Give your design a name, then generate a share link.'}
+                : 'Save your design to get a shareable link, download the PDF, or email it.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -196,91 +207,91 @@ export function ActionBar() {
                   id="design-name"
                   value={nameInput}
                   onChange={(e) => setNameInput(e.target.value)}
-                  placeholder="e.g. Business Card v2"
+                  placeholder="e.g. Acme Co"
                   className="text-sm"
                 />
               </div>
-              <div className="flex gap-1.5">
-                <Button
-                  onClick={handleConfirmShare}
-                  disabled={isSaving}
-                  className="flex-1"
-                  size="sm"
-                >
-                  {isSaving ? 'Generating link...' : 'Generate Link'}
-                </Button>
-                <Button onClick={handleDownload} variant="outline" size="sm" className="gap-1.5">
-                  <FileDown className="size-3.5" />
-                  PDF
-                </Button>
-              </div>
+              <Button
+                onClick={handleConfirmShare}
+                disabled={isSaving}
+                className="w-full h-8"
+                size="sm"
+              >
+                {isSaving ? 'Saving...' : 'Save Design'}
+              </Button>
             </div>
           ) : (
-            <div className="space-y-3">
-              <div className="flex gap-2">
-                <Input value={shareUrl} readOnly className="font-mono text-xs" />
-                <Button onClick={copyShareUrl} variant="outline" size="default" className="shrink-0 gap-1.5">
-                  {copied ? (
-                    <>
-                      <Check className="size-3.5" />
-                      Copied
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="size-3.5" />
-                      Copy
-                    </>
-                  )}
-                </Button>
-              </div>
-              <Button onClick={handleDownload} variant="outline" size="sm" className="w-full gap-1.5">
-                <FileDown className="size-3.5" />
-                Download PDF
-              </Button>
-
-              <div className="relative flex items-center gap-2 pt-1">
-                <div className="flex-1 border-t border-border" />
-                <span className="text-[11px] text-muted-foreground">or email it</span>
-                <div className="flex-1 border-t border-border" />
+            <div className="space-y-4">
+              {/* Copy link */}
+              <div className="space-y-1.5">
+                <h4 className="text-xs font-medium text-muted-foreground">Share Link</h4>
+                <div className="flex gap-2">
+                  <Input value={shareUrl} readOnly className="font-mono text-xs h-8" />
+                  <Button onClick={copyShareUrl} variant="outline" className="shrink-0 gap-1.5 h-8">
+                    {copied ? (
+                      <>
+                        <Check className="size-3.5" />
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="size-3.5" />
+                        Copy
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
 
-              <div className="flex gap-2">
-                <Input
-                  type="email"
-                  value={emailTo}
-                  onChange={(e) => { setEmailTo(e.target.value); setEmailError(null) }}
-                  placeholder="recipient@email.com"
-                  className="text-sm"
-                  onKeyDown={(e) => e.key === 'Enter' && handleSendEmail()}
-                />
-                <Button
-                  onClick={handleSendEmail}
-                  disabled={emailSending || !emailTo.trim() || emailSent}
-                  variant="outline"
-                  size="default"
-                  className="shrink-0 gap-1.5"
-                >
-                  {emailSent ? (
-                    <>
-                      <Check className="size-3.5" />
-                      Sent!
-                    </>
-                  ) : emailSending ? (
-                    <>
-                      <Loader2 className="size-3.5 animate-spin" />
-                      Sending
-                    </>
-                  ) : (
-                    <>
-                      <Mail className="size-3.5" />
-                      Send
-                    </>
-                  )}
+              {/* Email */}
+              <div className="space-y-1.5">
+                <h4 className="text-xs font-medium text-muted-foreground">Send via Email</h4>
+                <div className="flex gap-2">
+                  <Input
+                    type="email"
+                    value={emailTo}
+                    onChange={(e) => { setEmailTo(e.target.value); setEmailError(null) }}
+                    placeholder="recipient@email.com"
+                    className="text-sm h-8"
+                    onKeyDown={(e) => e.key === 'Enter' && handleSendEmail()}
+                  />
+                  <Button
+                    onClick={handleSendEmail}
+                    disabled={emailSending || !emailTo.trim() || emailSent}
+                    variant="outline"
+                    className="shrink-0 gap-1.5 h-8"
+                  >
+                    {emailSent ? (
+                      <>
+                        <Check className="size-3.5" />
+                        Sent!
+                      </>
+                    ) : emailSending ? (
+                      <>
+                        <Loader2 className="size-3.5 animate-spin" />
+                        Sending
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="size-3.5" />
+                        Send
+                      </>
+                    )}
+                  </Button>
+                </div>
+                {emailError && (
+                  <p className="text-xs text-destructive">{emailError}</p>
+                )}
+              </div>
+
+              {/* Download */}
+              <div className="space-y-1.5">
+                <h4 className="text-xs font-medium text-muted-foreground">Download</h4>
+                <Button onClick={handleDownload} variant="outline" className="w-full gap-1.5 h-8">
+                  <FileDown className="size-3.5" />
+                  Download PDF
                 </Button>
               </div>
-              {emailError && (
-                <p className="text-xs text-destructive">{emailError}</p>
-              )}
             </div>
           )}
         </DialogContent>

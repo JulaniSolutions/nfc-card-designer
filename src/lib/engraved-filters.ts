@@ -87,6 +87,36 @@ function getObjectId(obj: FabricObject): string | null {
 }
 
 /**
+ * Reset text colors on a canvas to a new default when the material contrast changes.
+ * Also removes engraved image filters.
+ * Any text whose fill matches the old default (or old engraved color) is updated to the new default.
+ * Text with custom user-chosen colors is preserved.
+ */
+export function resetColorsForMaterialSwitch(
+  canvas: Canvas,
+  oldDefaultPrintColor: string,
+  oldEngravedColor: string,
+  newDefaultPrintColor: string,
+) {
+  const objects = canvas.getObjects()
+
+  for (const obj of objects) {
+    if (obj instanceof FabricImage) {
+      removeEngravedFiltersFromImage(obj)
+    } else if (obj instanceof Textbox || obj instanceof IText) {
+      const fill = typeof obj.fill === 'string' ? obj.fill?.toLowerCase() : null
+      const isOldDefault = fill === oldDefaultPrintColor.toLowerCase()
+      const isOldEngraved = fill === oldEngravedColor.toLowerCase()
+      if (isOldDefault || isOldEngraved) {
+        obj.set('fill', newDefaultPrintColor)
+      }
+    }
+  }
+
+  canvas.renderAll()
+}
+
+/**
  * Get the current engraved color for the selected variation.
  */
 export function getCurrentEngravedColor(): string {

@@ -11,7 +11,6 @@ import {
   getCurrentDefaultPrintColor,
 } from '@/lib/engraved-filters'
 import { isImageOpaque } from '@/lib/transparency'
-import { uploadOriginalAsset } from '@/lib/upload-asset'
 
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/svg+xml', 'image/webp']
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
@@ -52,11 +51,9 @@ function scaleDownImage(img: HTMLImageElement): Promise<HTMLImageElement> {
   })
 }
 
-export function DesignToolbar() {
-  const { activeSide, materialId, designMethod, setOpaqueWarning } = useDesignStore()
+export function AddElementButtons() {
+  const { designMethod, setOpaqueWarning } = useDesignStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const sideLabel = activeSide === 'front' ? 'Front' : 'Back'
 
   const isEngraved = designMethod === 'engraved'
 
@@ -80,10 +77,8 @@ export function DesignToolbar() {
       top: canvas.height! / 2,
     })
 
-    // Corner-only handles, preserve aspect ratio
+    // Show side handles for width resizing, hide top/bottom
     text.setControlsVisibility({
-      ml: false,
-      mr: false,
       mt: false,
       mb: false,
     })
@@ -160,13 +155,8 @@ export function DesignToolbar() {
         tagged._designId = imgId
         tagged._addedInEngraved = isEngraved
 
-        // Upload original to Supabase Storage (non-blocking)
-        uploadOriginalAsset(file).then((asset) => {
-          if (asset) {
-            tagged._assetUrl = asset.url
-            tagged._assetName = file.name
-          }
-        })
+        // Store file name for later upload (assets uploaded on save, not immediately)
+        tagged._assetName = file.name
 
         // Apply engraved filters if in engraved mode
         if (isEngraved) {
@@ -194,40 +184,50 @@ export function DesignToolbar() {
   }
 
   return (
+    <div className="flex gap-1.5">
+      <Button onClick={addText} variant="outline" size="sm" className="flex-1 gap-1.5">
+        <Type className="size-3.5" />
+        Text
+      </Button>
+      <Button
+        onClick={() => fileInputRef.current?.click()}
+        variant="outline"
+        size="sm"
+        className="flex-1 gap-1.5"
+      >
+        <ImagePlus className="size-3.5" />
+        Image
+      </Button>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".jpg,.jpeg,.png,.gif,.svg,.webp"
+        onChange={handleImageUpload}
+        className="hidden"
+      />
+    </div>
+  )
+}
+
+export function DesignToolbar() {
+  const { activeSide, materialId } = useDesignStore()
+
+  const sideLabel = activeSide === 'front' ? 'Front' : 'Back'
+
+  return (
     <div className="space-y-4">
       {/* Design method toggle — metal only */}
       {materialId === 'metal' && <DesignMethodToggle />}
 
-      {/* Add elements */}
-      <div>
+      {/* Add elements — hidden on mobile (shown near layers instead) */}
+      <div className="hidden lg:block">
         <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2.5">
           Elements
           <span className="text-muted-foreground/60 normal-case tracking-normal ml-1">
             — adds to {sideLabel}
           </span>
         </h3>
-        <div className="flex gap-1.5">
-          <Button onClick={addText} variant="outline" size="sm" className="flex-1 gap-1.5">
-            <Type className="size-3.5" />
-            Text
-          </Button>
-          <Button
-            onClick={() => fileInputRef.current?.click()}
-            variant="outline"
-            size="sm"
-            className="flex-1 gap-1.5"
-          >
-            <ImagePlus className="size-3.5" />
-            Image
-          </Button>
-        </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".jpg,.jpeg,.png,.gif,.svg,.webp"
-          onChange={handleImageUpload}
-          className="hidden"
-        />
+        <AddElementButtons />
       </div>
 
       {/* Back card options */}

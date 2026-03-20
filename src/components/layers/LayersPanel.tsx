@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { FabricImage, Textbox, IText, type FabricObject, type Canvas } from 'fabric'
 import { useDesignStore } from '@/store/design-store'
 import { getVariation } from '@/config/materials'
@@ -17,6 +17,12 @@ import {
   Lock,
   QrCode,
   Nfc,
+  ArrowRightLeft,
+  Minus,
+  Plus,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
 } from 'lucide-react'
 import {
   enterCropMode,
@@ -32,45 +38,63 @@ import {
   getCurrentEngravedColor,
 } from '@/lib/engraved-filters'
 
-const AVAILABLE_FONTS = [
-  'Anton',
-  'Archivo',
-  'Arial',
-  'Bebas Neue',
-  'Bitter',
-  'Cabin',
-  'Cormorant Garamond',
-  'DM Sans',
-  'DM Serif Display',
-  'Fira Sans',
-  'IBM Plex Sans',
-  'Inter',
-  'Josefin Sans',
-  'Kanit',
-  'Lato',
-  'Libre Baskerville',
-  'Merriweather',
-  'Montserrat',
-  'Nunito',
-  'Open Sans',
-  'Oswald',
-  'Playfair Display',
-  'Poppins',
-  'Quicksand',
-  'Raleway',
-  'Roboto',
-  'Roboto Condensed',
-  'Roboto Slab',
-  'Source Sans 3',
-  'Space Grotesk',
-  'Work Sans',
-]
+const ALL_WEIGHTS = [
+  { value: 300, label: 'Light' },
+  { value: 400, label: 'Regular' },
+  { value: 500, label: 'Medium' },
+  { value: 600, label: 'Semi Bold' },
+  { value: 700, label: 'Bold' },
+] as const
+
+// Map of font name → available weights (from the Google Fonts link in index.html)
+const FONT_WEIGHTS: Record<string, number[]> = {
+  'Anton':              [400],
+  'Archivo':            [400, 500, 600, 700],
+  'Arial':              [400, 700],
+  'Bebas Neue':         [400],
+  'Bitter':             [400, 500, 600, 700],
+  'Cabin':              [400, 500, 600, 700],
+  'Cormorant Garamond': [400, 500, 600, 700],
+  'DM Sans':            [400, 500, 600, 700],
+  'DM Serif Display':   [400],
+  'Fira Sans':          [400, 500, 600, 700],
+  'IBM Plex Sans':      [400, 500, 600, 700],
+  'Inter':              [300, 400, 500, 600, 700],
+  'Josefin Sans':       [300, 400, 500, 600, 700],
+  'Kanit':              [400, 500, 600, 700],
+  'Lato':               [300, 400, 700],
+  'Libre Baskerville':  [400, 700],
+  'Merriweather':       [400, 700],
+  'Montserrat':         [300, 400, 500, 600, 700],
+  'Nunito':             [400, 500, 600, 700],
+  'Open Sans':          [300, 400, 500, 600, 700],
+  'Oswald':             [300, 400, 500, 600, 700],
+  'Playfair Display':   [400, 500, 600, 700],
+  'Poppins':            [300, 400, 500, 600, 700],
+  'Quicksand':          [400, 500, 600, 700],
+  'Raleway':            [300, 400, 500, 600, 700],
+  'Roboto':             [300, 400, 500, 700],
+  'Roboto Condensed':   [400, 500, 700],
+  'Roboto Slab':        [400, 500, 600, 700],
+  'Source Sans 3':      [400, 500, 600, 700],
+  'Space Grotesk':      [400, 500, 600, 700],
+  'Work Sans':          [400, 500, 600, 700],
+}
+
+const AVAILABLE_FONTS = Object.keys(FONT_WEIGHTS).sort()
+
+function getWeightsForFont(fontFamily: string): typeof ALL_WEIGHTS[number][] {
+  const weights = FONT_WEIGHTS[fontFamily] ?? [400]
+  return ALL_WEIGHTS.filter((w) => weights.includes(w.value))
+}
 
 interface LayerInfo {
   object: FabricObject
   type: 'text' | 'image' | 'icon'
   label: string
   locked: boolean
+  undeletable: boolean
+  variableId?: string
 }
 
 function getActiveCanvas(): Canvas | null {
@@ -92,13 +116,14 @@ function getLayers(canvas: Canvas | null): LayerInfo[] {
     })
     .map((obj) => {
       const locked = isLockedElement(obj)
-      const custom = obj as FabricObject & { _layerLabel?: string; _layerType?: string }
+      const undeletable = !!(obj as FabricObject & { _undeletable?: boolean })._undeletable
+      const custom = obj as FabricObject & { _layerLabel?: string; _layerType?: string; _variableId?: string }
       if (custom._layerLabel) {
         const layerType = (custom._layerType === 'icon' ? 'icon' : 'text') as LayerInfo['type']
-        return { object: obj, type: layerType, label: custom._layerLabel, locked }
+        return { object: obj, type: layerType, label: custom._layerLabel, locked, undeletable, variableId: custom._variableId }
       }
       if (obj instanceof FabricImage) {
-        return { object: obj, type: 'image' as const, label: 'Image', locked }
+        return { object: obj, type: 'image' as const, label: 'Image', locked, undeletable }
       }
       if (obj instanceof Textbox || obj instanceof IText) {
         const text = (obj as Textbox).text || 'Text'
@@ -107,9 +132,10 @@ function getLayers(canvas: Canvas | null): LayerInfo[] {
           type: 'text' as const,
           label: text.length > 24 ? text.slice(0, 24) + '…' : text,
           locked,
+          undeletable,
         }
       }
-      return { object: obj, type: 'image' as const, label: 'Object', locked }
+      return { object: obj, type: 'image' as const, label: 'Object', locked, undeletable }
     })
     .reverse()
 }
@@ -118,28 +144,60 @@ export function LayersPanel() {
   const activeSide = useDesignStore((s) => s.activeSide)
   const designMethod = useDesignStore((s) => s.designMethod)
   const variationId = useDesignStore((s) => s.variationId)
+  const variableFields = useDesignStore((s) => s.variableFields)
   // Subscribe to canvas JSON changes — these fire on every object:added/modified/removed
   const frontJson = useDesignStore((s) => s.frontCanvasJson)
   const backJson = useDesignStore((s) => s.backCanvasJson)
   const [layers, setLayers] = useState<LayerInfo[]>([])
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null)
   const [, forceUpdate] = useState(0)
+  const prevLayerCountRef = useRef(0)
 
-  const refreshLayers = useCallback(() => {
+  const refreshLayers = useCallback((syncSelection = false) => {
     const canvas = getActiveCanvas()
-    setLayers(getLayers(canvas))
+    const newLayers = getLayers(canvas)
+    const prevCount = prevLayerCountRef.current
+    const newCount = newLayers.filter((l) => !l.locked).length
+
+    // Auto-expand newly added layer (newest is at index 0 since layers are reversed)
+    // Skip auto-expand if the only unlocked layers are icons (e.g. NFC wave icon on first load)
+    const nonIconUnlocked = newLayers.filter((l) => !l.locked && l.type !== 'icon')
+    const prevNonIconCount = newLayers.length > 0 && nonIconUnlocked.length === 0 ? 0 : newCount
+
+    if (prevNonIconCount > prevCount && prevCount > 0) {
+      setExpandedIndex(0)
+    } else if (prevNonIconCount > 0 && prevCount === 0 && nonIconUnlocked.length > 0) {
+      setExpandedIndex(0)
+    } else if (syncSelection && canvas) {
+      // Sync expanded layer with canvas selection
+      const active = canvas.getActiveObject()
+      if (active) {
+        const idx = newLayers.findIndex((l) => l.object === active)
+        if (idx !== -1 && !newLayers[idx].locked) {
+          setExpandedIndex(idx)
+        } else {
+          // Selected a locked element — collapse any open layer
+          setExpandedIndex(null)
+        }
+      } else {
+        setExpandedIndex(null)
+      }
+    }
+
+    prevLayerCountRef.current = newCount
+    setLayers(newLayers)
   }, [])
 
   // Refresh layers whenever canvas JSON changes (objects added/removed/modified) or side switches
   useEffect(() => {
     refreshLayers()
-  }, [activeSide, frontJson, backJson, refreshLayers])
+  }, [activeSide, frontJson, backJson, variableFields, refreshLayers])
 
   // Also listen for selection events (these don't change JSON but affect highlighting)
   useEffect(() => {
     const events = ['selection:created', 'selection:updated', 'selection:cleared', 'text:changed'] as const
     const handler = () => {
-      refreshLayers()
+      refreshLayers(true)
       forceUpdate((n) => n + 1)
     }
 
@@ -179,12 +237,45 @@ export function LayersPanel() {
   }
 
   const handleDelete = (layer: LayerInfo) => {
-    if (layer.locked) return
+    if (layer.locked || layer.undeletable) return
     const canvas = getActiveCanvas()
     if (!canvas) return
     canvas.remove(layer.object)
     canvas.discardActiveObject()
     canvas.renderAll()
+    // If this was a variable text, also remove it from the store
+    if (layer.variableId) {
+      useDesignStore.getState().removeVariable(layer.variableId)
+    }
+    setExpandedIndex(null)
+    refreshLayers()
+  }
+
+  const handleMoveToOtherSide = (layer: LayerInfo) => {
+    if (layer.locked) return
+    const { activeSide } = useDesignStore.getState()
+    const sourceCanvas = getActiveCanvas()
+    const targetCanvas = activeSide === 'front'
+      ? window.__fabricCanvasBack
+      : window.__fabricCanvasFront
+
+    if (!sourceCanvas || !targetCanvas) return
+
+    // Remove from source
+    sourceCanvas.remove(layer.object)
+    sourceCanvas.discardActiveObject()
+    sourceCanvas.renderAll()
+
+    // Add to target
+    targetCanvas.add(layer.object)
+    targetCanvas.setActiveObject(layer.object)
+    targetCanvas.renderAll()
+
+    // Switch to the other side
+    const newSide = activeSide === 'front' ? 'back' : 'front'
+    window.__fabricCanvas = targetCanvas
+    useDesignStore.getState().setActiveSide(newSide)
+
     setExpandedIndex(null)
     refreshLayers()
   }
@@ -217,14 +308,25 @@ export function LayersPanel() {
             // Locked layers: non-expandable row, no editing controls
             if (layer.locked) {
               const LockedIcon = layer.label === 'QR Code' ? QrCode : Type
+              const isQr = layer.label === 'QR Code'
               return (
                 <div key={index}>
-                  <div className="flex items-center gap-2 rounded-md px-2 py-1.5 opacity-60">
+                  <div
+                    className={cn(
+                      'flex items-center gap-2 rounded-md px-2 py-1.5 opacity-60',
+                      isSelected && 'opacity-100 bg-foreground/[0.08]'
+                    )}
+                  >
                     <div className="size-3 shrink-0" />
                     <LockedIcon className="size-3.5 text-muted-foreground shrink-0" />
                     <span className="text-xs truncate flex-1">{layer.label}</span>
                     <Lock className="size-3 text-muted-foreground/40 shrink-0" />
                   </div>
+                  {isSelected && isQr && (
+                    <p className="text-[10px] text-muted-foreground pl-7 pr-2 py-1.5">
+                      The QR code placeholder cannot be deleted. Drag to reposition it.
+                    </p>
+                  )}
                 </div>
               )
             }
@@ -267,16 +369,18 @@ export function LayersPanel() {
                   {/* Label */}
                   <span className="text-xs truncate flex-1">{layer.label}</span>
 
-                  {/* Delete */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleDelete(layer)
-                    }}
-                    className="text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-destructive shrink-0 transition-colors"
-                  >
-                    <Trash2 className="size-3" />
-                  </button>
+                  {/* Delete — hidden for undeletable layers */}
+                  {!layer.undeletable && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDelete(layer)
+                      }}
+                      className="text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-destructive shrink-0 transition-colors"
+                    >
+                      <Trash2 className="size-3" />
+                    </button>
+                  )}
                 </div>
 
                 {/* Expanded inline controls */}
@@ -293,12 +397,25 @@ export function LayersPanel() {
                         onUpdate={refreshLayers}
                         designMethod={designMethod}
                         variationId={variationId}
+                        hideTextInput={!!layer.variableId}
                       />
                     ) : (
                       <ImageLayerControls
                         object={layer.object as FabricImage}
                         onUpdate={refreshLayers}
                       />
+                    )}
+                    {/* Move to other side — not for undeletable (back-only) elements */}
+                    {!layer.undeletable && (
+                      <Button
+                        onClick={() => handleMoveToOtherSide(layer)}
+                        variant="ghost"
+                        size="sm"
+                        className="w-full gap-1.5 h-7 text-xs text-muted-foreground mt-1.5"
+                      >
+                        <ArrowRightLeft className="size-3" />
+                        Move to {activeSide === 'front' ? 'Back' : 'Front'}
+                      </Button>
                     )}
                   </div>
                 )}
@@ -316,11 +433,13 @@ function TextLayerControls({
   onUpdate,
   designMethod,
   variationId,
+  hideTextInput,
 }: {
   object: Textbox
   onUpdate: () => void
   designMethod: string
   variationId: string | null
+  hideTextInput?: boolean
 }) {
   const textValue = object.text || ''
   const fillColor = (typeof object.fill === 'string' ? object.fill : '#000000')
@@ -343,13 +462,33 @@ function TextLayerControls({
 
   const handleFontChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const font = e.target.value
-    // Ensure the font is loaded before applying
+    const currentWeight = Number(object.fontWeight) || 400
+    const availableWeights = FONT_WEIGHTS[font] ?? [400]
+    // Snap to nearest available weight
+    const newWeight = availableWeights.includes(currentWeight)
+      ? currentWeight
+      : availableWeights.reduce((a, b) => Math.abs(b - currentWeight) < Math.abs(a - currentWeight) ? b : a)
     try {
-      await document.fonts.load(`400 16px "${font}"`)
+      await document.fonts.load(`${newWeight} 16px "${font}"`)
     } catch {
       // Font may already be loaded or unavailable — proceed anyway
     }
     object.set('fontFamily', font)
+    object.set('fontWeight', newWeight)
+    object.initDimensions()
+    const canvas = getActiveCanvas()
+    canvas?.renderAll()
+    onUpdate()
+  }
+
+  const handleWeightChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const weight = Number(e.target.value)
+    try {
+      await document.fonts.load(`${weight} 16px "${object.fontFamily}"`)
+    } catch {
+      // proceed anyway
+    }
+    object.set('fontWeight', weight)
     object.initDimensions()
     const canvas = getActiveCanvas()
     canvas?.renderAll()
@@ -358,27 +497,96 @@ function TextLayerControls({
 
   return (
     <div className="space-y-2">
-      {/* Text content */}
-      <Input
-        type="text"
-        value={textValue}
-        onChange={handleTextChange}
-        className="text-xs h-7"
-        placeholder="Enter text"
-      />
+      {/* Text content — hidden for name field (editable on canvas + sidebar) */}
+      {!hideTextInput && (
+        <Input
+          type="text"
+          value={textValue}
+          onChange={handleTextChange}
+          className="text-xs h-7"
+          placeholder="Enter text"
+        />
+      )}
 
-      {/* Font selector */}
-      <select
-        value={object.fontFamily || 'Arial'}
-        onChange={handleFontChange}
-        className="w-full text-xs h-7 rounded-md border border-border bg-background px-2"
-      >
-        {AVAILABLE_FONTS.map((font) => (
-          <option key={font} value={font} style={{ fontFamily: font }}>
-            {font}
-          </option>
-        ))}
-      </select>
+      {/* Font selector + weight */}
+      <div className="flex gap-1.5">
+        <select
+          value={object.fontFamily || 'Arial'}
+          onChange={handleFontChange}
+          className="flex-1 min-w-0 text-xs h-7 rounded-md border border-border bg-background px-2"
+        >
+          {AVAILABLE_FONTS.map((font) => (
+            <option key={font} value={font} style={{ fontFamily: font }}>
+              {font}
+            </option>
+          ))}
+        </select>
+        <select
+          value={object.fontWeight || 400}
+          onChange={handleWeightChange}
+          className="w-[90px] shrink-0 text-xs h-7 rounded-md border border-border bg-background px-2"
+        >
+          {getWeightsForFont(object.fontFamily || 'Arial').map((w) => (
+            <option key={w.value} value={w.value}>{w.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Font size */}
+      <div className="flex items-center gap-1.5">
+        <span className="text-[10px] text-muted-foreground shrink-0">Size</span>
+        <Button
+          variant="outline"
+          size="icon"
+          className="size-6"
+          onClick={() => {
+            const newSize = Math.max(8, Math.round(object.fontSize - 2))
+            object.set('fontSize', newSize)
+            object.initDimensions()
+            getActiveCanvas()?.renderAll()
+            onUpdate()
+          }}
+        >
+          <Minus className="size-2.5" />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          className="size-6"
+          onClick={() => {
+            const newSize = Math.min(200, Math.round(object.fontSize + 2))
+            object.set('fontSize', newSize)
+            object.initDimensions()
+            getActiveCanvas()?.renderAll()
+            onUpdate()
+          }}
+        >
+          <Plus className="size-2.5" />
+        </Button>
+      </div>
+
+      {/* Text alignment */}
+      <div className="flex items-center gap-1.5">
+        <span className="text-[10px] text-muted-foreground shrink-0">Align</span>
+        {(['left', 'center', 'right'] as const).map((align) => {
+          const Icon = align === 'left' ? AlignLeft : align === 'center' ? AlignCenter : AlignRight
+          return (
+            <Button
+              key={align}
+              variant="outline"
+              size="icon"
+              className={cn('size-6', object.textAlign === align && 'bg-foreground/10 border-foreground/30')}
+              onClick={() => {
+                object.set('textAlign', align)
+                getActiveCanvas()?.renderAll()
+                onUpdate()
+              }}
+            >
+              <Icon className="size-2.5" />
+            </Button>
+          )
+        })}
+      </div>
 
       {/* Color picker — hidden in engraved mode */}
       {!isEngraved && (

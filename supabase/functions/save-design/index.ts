@@ -10,8 +10,8 @@ const ipRequests = new Map<string, number[]>()
 const RATE_LIMIT_WINDOW_MS = 60_000 // 1 minute
 const RATE_LIMIT_MAX = 10 // max 10 saves per minute per IP
 
-const MAX_CANVAS_JSON_BYTES = 512_000 // 500KB per canvas field
-const MAX_BODY_BYTES = 1_200_000 // ~1.1MB total body
+const MAX_CANVAS_JSON_BYTES = 2_000_000 // 2MB per canvas field
+const MAX_BODY_BYTES = 5_000_000 // 5MB total body
 
 function getClientIp(req: Request): string {
   return (
@@ -105,6 +105,8 @@ Deno.serve(async (req) => {
       design_method,
       back_option,
       card_names,
+      variable_fields,
+      card_data,
       quantity,
     } = body
 
@@ -146,6 +148,8 @@ Deno.serve(async (req) => {
       design_method: design_method || 'printed',
       back_option: back_option || 'qr-only',
       card_names: card_names || [''],
+      variable_fields: variable_fields || [],
+      card_data: card_data || [],
       quantity: quantity || 1,
       updated_at: new Date().toISOString(),
     }
