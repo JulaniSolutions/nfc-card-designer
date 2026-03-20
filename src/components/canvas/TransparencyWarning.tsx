@@ -59,15 +59,17 @@ export function TransparencyWarning({
     setError(null)
 
     try {
-      const el = targetImage.getElement() as HTMLImageElement
+      // Read from _originalElement (unfiltered source) so BG removal gets the
+      // clean full-color image, not the engraved grayscale/tinted version.
+      const internal = targetImage as FabricImage & { _originalElement?: HTMLImageElement }
+      const sourceEl = internal._originalElement || targetImage.getElement() as HTMLImageElement
 
-      // Get image as data URL
-      const canvas = document.createElement('canvas')
-      canvas.width = el.naturalWidth || el.width
-      canvas.height = el.naturalHeight || el.height
-      const ctx = canvas.getContext('2d')!
-      ctx.drawImage(el, 0, 0)
-      const dataUrl = canvas.toDataURL('image/png')
+      const offscreen = document.createElement('canvas')
+      offscreen.width = sourceEl.naturalWidth || sourceEl.width
+      offscreen.height = sourceEl.naturalHeight || sourceEl.height
+      const ctx = offscreen.getContext('2d')!
+      ctx.drawImage(sourceEl, 0, 0)
+      const dataUrl = offscreen.toDataURL('image/png')
 
       // Store original for undo
       const customImg = targetImage as FabricImage & { _originalSrc?: string }
@@ -81,10 +83,13 @@ export function TransparencyWarning({
       const newImg = new Image()
       newImg.crossOrigin = 'anonymous'
       newImg.onload = () => {
+        // Clear filters before setElement so it doesn't re-apply stale filters.
+        // setElement updates both _element and _originalElement.
+        targetImage.filters = []
         targetImage.setElement(newImg)
         targetImage.set({ width: newImg.width, height: newImg.height })
 
-        // Re-apply engraved filters if needed
+        // Re-apply engraved filters on the clean BG-removed source
         if (designMethod === 'engraved') {
           applyEngravedFiltersToImage(targetImage, getCurrentEngravedColor())
         }
@@ -118,6 +123,7 @@ export function TransparencyWarning({
     const restored = new Image()
     restored.crossOrigin = 'anonymous'
     restored.onload = () => {
+      targetImage.filters = []
       targetImage.setElement(restored)
       targetImage.set({ width: restored.width, height: restored.height })
 
@@ -136,13 +142,50 @@ export function TransparencyWarning({
   }
 
   const handleReplace = () => {
+    if (!targetImage) return
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = '.jpg,.jpeg,.png,.gif,.svg,.webp'
     input.onchange = () => {
-      // Trigger replacement via the existing upload flow
-      // For now, dismiss the banner — the new image will trigger its own check
-      onStateChange('dismissed')
+      const file = input.files?.[0]
+      if (!file) return
+
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string
+        const newImg = new Image()
+        newImg.crossOrigin = 'anonymous'
+        newImg.onload = () => {
+          // Clear filters and replace the element
+          targetImage.filters = []
+          targetImage.setElement(newImg)
+          targetImage.set({ width: newImg.width, height: newImg.height })
+
+          // Scale to fit canvas
+          const canvas = window.__fabricCanvas
+          if (canvas) {
+            const maxDim = Math.max(canvas.width!, canvas.height!) * 0.6
+            const imgMaxDim = Math.max(newImg.width, newImg.height)
+            const scale = Math.min(maxDim / imgMaxDim, 1)
+            targetImage.scale(scale)
+          }
+
+          // Re-apply engraved filters if needed
+          if (designMethod === 'engraved') {
+            applyEngravedFiltersToImage(targetImage, getCurrentEngravedColor())
+          }
+
+          // Clear undo state
+          const customImg = targetImage as FabricImage & { _originalSrc?: string; _isOpaque?: boolean }
+          customImg._originalSrc = undefined
+          customImg._isOpaque = false
+
+          canvas?.renderAll()
+          onStateChange('dismissed')
+        }
+        newImg.src = dataUrl
+      }
+      reader.readAsDataURL(file)
     }
     input.click()
   }
@@ -227,6 +270,14 @@ export function TransparencyWarning({
             {state === 'bg_removed' && (
               <>
                 <Button
+                  onClick={handleSwitchToPrinted}
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-[11px]"
+                >
+                  Switch to Printed
+                </Button>
+                <Button
                   onClick={handleUndoBgRemoval}
                   variant="outline"
                   size="sm"
@@ -235,12 +286,12 @@ export function TransparencyWarning({
                   Undo BG Removal
                 </Button>
                 <Button
-                  onClick={handleSwitchToPrinted}
+                  onClick={handleReplace}
                   variant="outline"
                   size="sm"
                   className="h-7 text-[11px]"
                 >
-                  Switch to Printed
+                  Replace
                 </Button>
                 <Button
                   onClick={() => onStateChange('dismissed')}

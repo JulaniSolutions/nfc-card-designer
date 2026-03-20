@@ -60,8 +60,8 @@ export function DesignMethodToggle() {
       </div>
       <p className="text-[10px] text-muted-foreground mt-1.5">
         {designMethod === 'engraved'
-          ? 'Single-color laser engraved finish'
-          : 'Full-color UV printed finish'}
+          ? 'Recommended for the most premium quality finish. Single-color laser engraved.'
+          : 'Full-color UV printed finish. The back is always engraved for long-lasting QR durability.'}
       </p>
     </div>
   )

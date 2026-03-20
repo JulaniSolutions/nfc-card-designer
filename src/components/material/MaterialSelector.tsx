@@ -66,7 +66,7 @@ export function MaterialSelector() {
         <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2.5">
           Material
         </h3>
-        <div className="grid grid-cols-2 gap-1.5">
+        <div className="grid grid-cols-3 lg:grid-cols-2 gap-1.5">
           {materials.map((material) => {
             const allOutOfStock = material.variations.every((v) => v.inStock === false)
             return (

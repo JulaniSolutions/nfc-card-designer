@@ -368,19 +368,6 @@ export function LayersPanel() {
 
                   {/* Label */}
                   <span className="text-xs truncate flex-1">{layer.label}</span>
-
-                  {/* Delete — hidden for undeletable layers */}
-                  {!layer.undeletable && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleDelete(layer)
-                      }}
-                      className="text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-destructive shrink-0 transition-colors"
-                    >
-                      <Trash2 className="size-3" />
-                    </button>
-                  )}
                 </div>
 
                 {/* Expanded inline controls */}
@@ -415,6 +402,18 @@ export function LayersPanel() {
                       >
                         <ArrowRightLeft className="size-3" />
                         Move to {activeSide === 'front' ? 'Back' : 'Front'}
+                      </Button>
+                    )}
+                    {/* Delete */}
+                    {!layer.undeletable && (
+                      <Button
+                        onClick={() => handleDelete(layer)}
+                        variant="ghost"
+                        size="sm"
+                        className="w-full gap-1.5 h-7 text-xs text-destructive hover:text-destructive mt-0.5"
+                      >
+                        <Trash2 className="size-3" />
+                        Delete
                       </Button>
                     )}
                   </div>
@@ -658,85 +657,46 @@ function ImageLayerControls({
   const handleRemoveBg = async () => {
     setIsRemoving(true)
     try {
-      // Temporarily strip engraved filters to get the clean original image
-      const hadFilters = object.filters && object.filters.length > 0
-      if (hadFilters) {
-        const savedFilters = [...object.filters!]
-        object.filters = []
-        object.applyFilters()
-        // Now capture the clean image
-        const el = object.getElement() as HTMLImageElement
-        const offscreen = document.createElement('canvas')
-        offscreen.width = el.naturalWidth || el.width
-        offscreen.height = el.naturalHeight || el.height
-        const ctx = offscreen.getContext('2d')!
-        ctx.drawImage(el, 0, 0)
-        const dataUrl = offscreen.toDataURL('image/png')
+      // Read from _originalElement (unfiltered source) so BG removal gets the
+      // clean full-color image, not the engraved grayscale/tinted version.
+      const internal = object as FabricImage & { _originalElement?: HTMLImageElement }
+      const sourceEl = internal._originalElement || object.getElement() as HTMLImageElement
+      const offscreen = document.createElement('canvas')
+      offscreen.width = sourceEl.naturalWidth || sourceEl.width
+      offscreen.height = sourceEl.naturalHeight || sourceEl.height
+      const ctx = offscreen.getContext('2d')!
+      ctx.drawImage(sourceEl, 0, 0)
+      const dataUrl = offscreen.toDataURL('image/png')
 
-        // Store original for undo (before any processing)
-        if (!customImg._originalSrc) {
-          customImg._originalSrc = dataUrl
-        }
-
-        // Restore filters while we wait for the API
-        object.filters = savedFilters
-        object.applyFilters()
-
-        const resultUrl = await removeBackground(dataUrl)
-
-        const newImg = new Image()
-        newImg.crossOrigin = 'anonymous'
-        newImg.onload = () => {
-          // Set clean element first, then re-apply engraved filters
-          object.filters = []
-          object.applyFilters()
-          object.setElement(newImg)
-          object.set({ width: newImg.width, height: newImg.height })
-
-          if (designMethod === 'engraved') {
-            applyEngravedFiltersToImage(object, getCurrentEngravedColor())
-          }
-
-          getActiveCanvas()?.renderAll()
-          setIsRemoving(false)
-          onUpdate()
-        }
-        newImg.onerror = () => {
-          setIsRemoving(false)
-          alert('Failed to load processed image.')
-        }
-        newImg.src = resultUrl
-      } else {
-        // No filters — standard flow
-        const el = object.getElement() as HTMLImageElement
-        const offscreen = document.createElement('canvas')
-        offscreen.width = el.naturalWidth || el.width
-        offscreen.height = el.naturalHeight || el.height
-        const ctx = offscreen.getContext('2d')!
-        ctx.drawImage(el, 0, 0)
-        const dataUrl = offscreen.toDataURL('image/png')
-
-        if (!customImg._originalSrc) {
-          customImg._originalSrc = dataUrl
-        }
-
-        const resultUrl = await removeBackground(dataUrl)
-
-        const newImg = new Image()
-        newImg.crossOrigin = 'anonymous'
-        newImg.onload = () => {
-          object.setElement(newImg)
-          object.set({ width: newImg.width, height: newImg.height })
-          getActiveCanvas()?.renderAll()
-          setIsRemoving(false)
-          onUpdate()
-        }
-        newImg.onerror = () => {
-          setIsRemoving(false)
-          alert('Failed to load processed image.')
-        }
-        newImg.src = resultUrl
+      // Store original for undo (before any processing)
+      if (!customImg._originalSrc) {
+        customImg._originalSrc = dataUrl
       }
+
+      const resultUrl = await removeBackground(dataUrl)
+
+      const newImg = new Image()
+      newImg.crossOrigin = 'anonymous'
+      newImg.onload = () => {
+        // Clear filters before setElement so it doesn't re-apply stale filters.
+        // setElement updates both _element and _originalElement.
+        object.filters = []
+        object.setElement(newImg)
+        object.set({ width: newImg.width, height: newImg.height })
+
+        if (designMethod === 'engraved') {
+          applyEngravedFiltersToImage(object, getCurrentEngravedColor())
+        }
+
+        getActiveCanvas()?.renderAll()
+        setIsRemoving(false)
+        onUpdate()
+      }
+      newImg.onerror = () => {
+        setIsRemoving(false)
+        alert('Failed to load processed image.')
+      }
+      newImg.src = resultUrl
     } catch (err) {
       setIsRemoving(false)
       alert(err instanceof Error ? err.message : 'Background removal failed.')
@@ -749,9 +709,7 @@ function ImageLayerControls({
     const restored = new Image()
     restored.crossOrigin = 'anonymous'
     restored.onload = () => {
-      // Clear filters before swapping element to avoid stale cached state
       object.filters = []
-      object.applyFilters()
       object.setElement(restored)
       object.set({ width: restored.width, height: restored.height })
 
@@ -761,7 +719,6 @@ function ImageLayerControls({
 
       customImg._originalSrc = undefined
       getActiveCanvas()?.renderAll()
-
       onUpdate()
     }
     restored.src = customImg._originalSrc
