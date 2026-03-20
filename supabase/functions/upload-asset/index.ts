@@ -1,10 +1,17 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const appOrigin = Deno.env.get('APP_ORIGIN') || 'https://nfcdesigner.com'
+const allowedOrigins = [
+  Deno.env.get('APP_ORIGIN') || 'https://nfcdesigner.com',
+  'http://localhost:5173',
+  'http://localhost:4173',
+]
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': appOrigin,
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('origin') ?? ''
+  return {
+    'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  }
 }
 
 // In-memory IP rate limiting
@@ -44,8 +51,10 @@ function isRateLimited(ip: string): boolean {
 }
 
 Deno.serve(async (req) => {
+  const cors = getCorsHeaders(req)
+
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: cors })
   }
 
   try {
@@ -54,7 +63,7 @@ Deno.serve(async (req) => {
     if (isRateLimited(ip)) {
       return new Response(
         JSON.stringify({ error: 'Too many uploads. Please try again later.' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 429 }
+        { headers: { ...cors, 'Content-Type': 'application/json' }, status: 429 }
       )
     }
 
@@ -66,7 +75,7 @@ Deno.serve(async (req) => {
     if (file.size > MAX_FILE_SIZE) {
       return new Response(
         JSON.stringify({ error: `File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB.` }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 413 }
+        { headers: { ...cors, 'Content-Type': 'application/json' }, status: 413 }
       )
     }
 
@@ -74,7 +83,7 @@ Deno.serve(async (req) => {
     if (!ALLOWED_MIME_TYPES.includes(file.type)) {
       return new Response(
         JSON.stringify({ error: `File type not allowed. Accepted: ${ALLOWED_MIME_TYPES.join(', ')}` }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 415 }
+        { headers: { ...cors, 'Content-Type': 'application/json' }, status: 415 }
       )
     }
 
@@ -84,7 +93,7 @@ Deno.serve(async (req) => {
     if (!fileExt || !validExtensions.includes(fileExt)) {
       return new Response(
         JSON.stringify({ error: 'Invalid file extension.' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 415 }
+        { headers: { ...cors, 'Content-Type': 'application/json' }, status: 415 }
       )
     }
 
@@ -112,13 +121,13 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({ url: urlData.publicUrl, path: filePath }),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
         status: 201,
       }
     )
   } catch (error) {
     return new Response(JSON.stringify({ error: (error as Error).message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json' },
       status: 400,
     })
   }

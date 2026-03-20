@@ -1,8 +1,15 @@
-const appOrigin = Deno.env.get('APP_ORIGIN') || 'https://nfcdesigner.com'
+const allowedOrigins = [
+  Deno.env.get('APP_ORIGIN') || 'https://nfcdesigner.com',
+  'http://localhost:5173',
+  'http://localhost:4173',
+]
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': appOrigin,
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('origin') ?? ''
+  return {
+    'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  }
 }
 
 // Rate limiting
@@ -35,8 +42,10 @@ function isRateLimited(ip: string): boolean {
 }
 
 Deno.serve(async (req) => {
+  const cors = getCorsHeaders(req)
+
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: cors })
   }
 
   try {
@@ -44,7 +53,7 @@ Deno.serve(async (req) => {
     if (!apiKey) {
       return new Response(
         JSON.stringify({ error: 'Background removal is not configured.' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 503 }
+        { headers: { ...cors, 'Content-Type': 'application/json' }, status: 503 }
       )
     }
 
@@ -52,7 +61,7 @@ Deno.serve(async (req) => {
     if (isRateLimited(ip)) {
       return new Response(
         JSON.stringify({ error: 'Too many requests. Please try again later.' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 429 }
+        { headers: { ...cors, 'Content-Type': 'application/json' }, status: 429 }
       )
     }
 
@@ -60,7 +69,7 @@ Deno.serve(async (req) => {
     if (contentLength && parseInt(contentLength) > MAX_BODY_BYTES) {
       return new Response(
         JSON.stringify({ error: 'Image too large.' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 413 }
+        { headers: { ...cors, 'Content-Type': 'application/json' }, status: 413 }
       )
     }
 
@@ -68,7 +77,7 @@ Deno.serve(async (req) => {
     if (!imageDataUrl || typeof imageDataUrl !== 'string' || !imageDataUrl.startsWith('data:image/')) {
       return new Response(
         JSON.stringify({ error: 'Invalid image data.' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        { headers: { ...cors, 'Content-Type': 'application/json' }, status: 400 }
       )
     }
 
@@ -95,7 +104,7 @@ Deno.serve(async (req) => {
       const status = response.status === 429 ? 429 : 502
       return new Response(
         JSON.stringify({ error: status === 429 ? 'Rate limit exceeded. Please wait and try again.' : `Background removal failed: ${text}` }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status }
+        { headers: { ...cors, 'Content-Type': 'application/json' }, status }
       )
     }
 
@@ -104,18 +113,18 @@ Deno.serve(async (req) => {
     if (!result?.imageDataURI) {
       return new Response(
         JSON.stringify({ error: 'No image returned from background removal service.' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 502 }
+        { headers: { ...cors, 'Content-Type': 'application/json' }, status: 502 }
       )
     }
 
     return new Response(
       JSON.stringify({ imageDataURI: result.imageDataURI }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...cors, 'Content-Type': 'application/json' } }
     )
   } catch (error) {
     return new Response(
       JSON.stringify({ error: (error as Error).message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      { headers: { ...cors, 'Content-Type': 'application/json' }, status: 500 }
     )
   }
 })

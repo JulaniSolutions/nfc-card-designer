@@ -1,8 +1,17 @@
 const appOrigin = Deno.env.get('APP_ORIGIN') || 'https://nfcdesigner.com'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': appOrigin,
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+const allowedOrigins = [
+  appOrigin,
+  'http://localhost:5173',
+  'http://localhost:4173',
+]
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('origin') ?? ''
+  return {
+    'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  }
 }
 
 // In-memory IP rate limiting (per edge function instance)
@@ -94,8 +103,10 @@ function buildTextEmail(designUrl: string, designName?: string): string {
 }
 
 Deno.serve(async (req) => {
+  const cors = getCorsHeaders(req)
+
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: cors })
   }
 
   try {
@@ -104,7 +115,7 @@ Deno.serve(async (req) => {
     if (isRateLimited(ip)) {
       return new Response(
         JSON.stringify({ error: 'Too many requests. Please try again later.' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 429 }
+        { headers: { ...cors, 'Content-Type': 'application/json' }, status: 429 }
       )
     }
 
@@ -116,14 +127,14 @@ Deno.serve(async (req) => {
       if (!turnstileToken) {
         return new Response(
           JSON.stringify({ error: 'CAPTCHA verification required.' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+          { headers: { ...cors, 'Content-Type': 'application/json' }, status: 403 }
         )
       }
       const valid = await verifyTurnstile(turnstileToken)
       if (!valid) {
         return new Response(
           JSON.stringify({ error: 'CAPTCHA verification failed.' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+          { headers: { ...cors, 'Content-Type': 'application/json' }, status: 403 }
         )
       }
     }
@@ -134,7 +145,7 @@ Deno.serve(async (req) => {
     if (!to_email || typeof to_email !== 'string' || !EMAIL_REGEX.test(to_email)) {
       return new Response(
         JSON.stringify({ error: 'Invalid email address.' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        { headers: { ...cors, 'Content-Type': 'application/json' }, status: 400 }
       )
     }
 
@@ -142,7 +153,7 @@ Deno.serve(async (req) => {
     if (!design_url || typeof design_url !== 'string' || !design_url.startsWith(appOrigin)) {
       return new Response(
         JSON.stringify({ error: 'Invalid design URL.' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        { headers: { ...cors, 'Content-Type': 'application/json' }, status: 400 }
       )
     }
 
@@ -157,7 +168,7 @@ Deno.serve(async (req) => {
     if (!postmarkToken || !fromAddress) {
       return new Response(
         JSON.stringify({ error: 'Email service not configured.' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        { headers: { ...cors, 'Content-Type': 'application/json' }, status: 500 }
       )
     }
 
@@ -189,12 +200,12 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({ success: true }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...cors, 'Content-Type': 'application/json' } }
     )
   } catch (error) {
     return new Response(
       JSON.stringify({ error: (error as Error).message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      { headers: { ...cors, 'Content-Type': 'application/json' }, status: 400 }
     )
   }
 })

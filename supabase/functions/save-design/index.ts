@@ -1,10 +1,17 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const appOrigin = Deno.env.get('APP_ORIGIN') || 'https://nfcdesigner.com'
+const allowedOrigins = [
+  Deno.env.get('APP_ORIGIN') || 'https://nfcdesigner.com',
+  'http://localhost:5173',
+  'http://localhost:4173',
+]
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': appOrigin,
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('origin') ?? ''
+  return {
+    'Access-Control-Allow-Origin': allowedOrigins.includes(origin) ? origin : allowedOrigins[0],
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  }
 }
 
 // In-memory IP rate limiting (per edge function instance)
@@ -52,8 +59,10 @@ async function verifyTurnstile(token: string): Promise<boolean> {
 }
 
 Deno.serve(async (req) => {
+  const cors = getCorsHeaders(req)
+
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: cors })
   }
 
   try {
@@ -62,7 +71,7 @@ Deno.serve(async (req) => {
     if (isRateLimited(ip)) {
       return new Response(
         JSON.stringify({ error: 'Too many requests. Please try again later.' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 429 }
+        { headers: { ...cors, 'Content-Type': 'application/json' }, status: 429 }
       )
     }
 
@@ -71,7 +80,7 @@ Deno.serve(async (req) => {
     if (contentLength && parseInt(contentLength) > MAX_BODY_BYTES) {
       return new Response(
         JSON.stringify({ error: 'Request too large.' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 413 }
+        { headers: { ...cors, 'Content-Type': 'application/json' }, status: 413 }
       )
     }
 
@@ -83,14 +92,14 @@ Deno.serve(async (req) => {
       if (!turnstileToken) {
         return new Response(
           JSON.stringify({ error: 'CAPTCHA verification required.' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+          { headers: { ...cors, 'Content-Type': 'application/json' }, status: 403 }
         )
       }
       const valid = await verifyTurnstile(turnstileToken)
       if (!valid) {
         return new Response(
           JSON.stringify({ error: 'CAPTCHA verification failed.' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 403 }
+          { headers: { ...cors, 'Content-Type': 'application/json' }, status: 403 }
         )
       }
     }
@@ -116,7 +125,7 @@ Deno.serve(async (req) => {
     if (!material_id || !variation_id) {
       return new Response(
         JSON.stringify({ error: 'Missing required fields.' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        { headers: { ...cors, 'Content-Type': 'application/json' }, status: 400 }
       )
     }
 
@@ -124,13 +133,13 @@ Deno.serve(async (req) => {
     if (front_canvas_json && new TextEncoder().encode(front_canvas_json).length > MAX_CANVAS_JSON_BYTES) {
       return new Response(
         JSON.stringify({ error: 'Front canvas data too large.' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 413 }
+        { headers: { ...cors, 'Content-Type': 'application/json' }, status: 413 }
       )
     }
     if (back_canvas_json && new TextEncoder().encode(back_canvas_json).length > MAX_CANVAS_JSON_BYTES) {
       return new Response(
         JSON.stringify({ error: 'Back canvas data too large.' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 413 }
+        { headers: { ...cors, 'Content-Type': 'application/json' }, status: 413 }
       )
     }
 
@@ -167,7 +176,7 @@ Deno.serve(async (req) => {
 
       if (error) throw error
       return new Response(JSON.stringify(data), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...cors, 'Content-Type': 'application/json' },
       })
     }
 
@@ -188,12 +197,12 @@ Deno.serve(async (req) => {
 
     if (error) throw error
     return new Response(JSON.stringify(data), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json' },
       status: 201,
     })
   } catch (error) {
     return new Response(JSON.stringify({ error: (error as Error).message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...cors, 'Content-Type': 'application/json' },
       status: 400,
     })
   }
