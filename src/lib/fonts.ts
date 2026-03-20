@@ -44,18 +44,25 @@ export async function ensureFontsFromCanvasJson(canvasJson: string | null | unde
   try {
     const parsed = JSON.parse(canvasJson)
     const objects = parsed?.objects ?? []
-    const fonts = new Set<string>()
+    const fontsToLoad: { name: string; weight: number }[] = []
     for (const obj of objects) {
       if (obj.fontFamily && typeof obj.fontFamily === 'string') {
-        fonts.add(obj.fontFamily)
+        const weights = FONT_WEIGHTS[obj.fontFamily] ?? [400, 700]
+        // Inject the stylesheet
+        await ensureGoogleFont(obj.fontFamily, weights)
+        const weight = obj.fontWeight ?? 400
+        fontsToLoad.push({ name: obj.fontFamily, weight })
       }
     }
-    await Promise.all(
-      [...fonts].map((font) => {
-        const weights = FONT_WEIGHTS[font] ?? [400, 700]
-        return ensureGoogleFont(font, weights)
-      })
-    )
+    // Wait for all font files to actually download
+    if (fontsToLoad.length > 0) {
+      await document.fonts.ready
+      await Promise.all(
+        fontsToLoad.map(({ name, weight }) =>
+          document.fonts.load(`${weight} 16px "${name}"`).catch(() => {})
+        )
+      )
+    }
   } catch {
     // Ignore parse errors
   }

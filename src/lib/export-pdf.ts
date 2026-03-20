@@ -30,6 +30,26 @@ function parseHexColor(hex: string): [number, number, number] {
   ]
 }
 
+// jsPDF only has these built-in fonts — everything else must be rasterized
+const JSPDF_FONTS = new Set(['helvetica', 'courier', 'times', 'arial'])
+
+function isNativeFont(fontFamily: string): boolean {
+  return JSPDF_FONTS.has(fontFamily.toLowerCase())
+}
+
+function renderTextAsImage(pdf: jsPDF, textObj: Textbox | IText) {
+  const bounds = textObj.getBoundingRect()
+  if (bounds.width < 1 || bounds.height < 1) return
+  const dataUrl = textObj.toDataURL({ format: 'png', multiplier: 2 })
+  pdf.addImage(
+    dataUrl, 'PNG',
+    pxToMmX(bounds.left, CARD_WIDTH_MM),
+    pxToMmY(bounds.top, CARD_HEIGHT_MM),
+    pxToMmX(bounds.width, CARD_WIDTH_MM),
+    pxToMmY(bounds.height, CARD_HEIGHT_MM),
+  )
+}
+
 function renderTextToPdf(
   pdf: jsPDF,
   textObj: Textbox | IText,
@@ -40,6 +60,13 @@ function renderTextToPdf(
 ) {
   const text = textObj.text || ''
   if (!text.trim()) return
+
+  // For custom Google Fonts, rasterize as image — jsPDF can't embed them
+  const fontFamily = textObj.fontFamily || 'helvetica'
+  if (!isNativeFont(fontFamily)) {
+    renderTextAsImage(pdf, textObj)
+    return
+  }
 
   const fontSize = (textObj.fontSize || 34) * (textObj.scaleY || 1)
   const fontSizeMm = pxToMmY(fontSize, CARD_HEIGHT_MM)
