@@ -174,6 +174,14 @@ function CardCanvas({ side }: { side: CardSide }) {
     }
   }, [side, setActiveSide, saveState])
 
+  // Deselect objects when this canvas is no longer the active side
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || isActive) return
+    canvas.discardActiveObject()
+    canvas.renderAll()
+  }, [isActive])
+
   // Update background color
   useEffect(() => {
     const canvas = canvasRef.current
