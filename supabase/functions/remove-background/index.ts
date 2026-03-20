@@ -1,5 +1,7 @@
+const appOrigin = Deno.env.get('APP_ORIGIN') || 'https://nfcdesigner.com'
+
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': appOrigin,
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 

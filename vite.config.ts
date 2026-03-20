@@ -10,4 +10,15 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          fabric: ['fabric'],
+          jspdf: ['jspdf', 'html2canvas'],
+          supabase: ['@supabase/supabase-js'],
+        },
+      },
+    },
+  },
 })

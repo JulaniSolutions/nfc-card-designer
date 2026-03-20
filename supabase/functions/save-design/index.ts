@@ -1,7 +1,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+const appOrigin = Deno.env.get('APP_ORIGIN') || 'https://nfcdesigner.com'
+
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': appOrigin,
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
@@ -169,11 +171,13 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Generate short ID for new design
+    // Generate short ID for new design (crypto-secure)
     const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+    const randomBytes = new Uint8Array(8)
+    crypto.getRandomValues(randomBytes)
     let shortId = ''
     for (let i = 0; i < 8; i++) {
-      shortId += chars[Math.floor(Math.random() * chars.length)]
+      shortId += chars[randomBytes[i] % chars.length]
     }
 
     const { data, error } = await supabase

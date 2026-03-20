@@ -1,5 +1,7 @@
+const appOrigin = Deno.env.get('APP_ORIGIN') || 'https://nfcdesigner.com'
+
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': appOrigin,
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
@@ -43,7 +45,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
   return data.success === true
 }
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const EMAIL_REGEX = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/
 
 function escapeHtml(str: string): string {
   return str
@@ -136,9 +138,8 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Validate design URL
-    const appOrigin = Deno.env.get('APP_ORIGIN')
-    if (!design_url || typeof design_url !== 'string' || (appOrigin && !design_url.startsWith(appOrigin))) {
+    // Validate design URL — must match APP_ORIGIN
+    if (!design_url || typeof design_url !== 'string' || !design_url.startsWith(appOrigin)) {
       return new Response(
         JSON.stringify({ error: 'Invalid design URL.' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
