@@ -1,8 +1,9 @@
 import { useDesignStore, type CardSide } from '@/store/design-store'
 import { Button } from '@/components/ui/button'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Textbox, FabricImage, Canvas } from 'fabric'
 import { useRef, useState } from 'react'
-import { Type, ImagePlus, X } from 'lucide-react'
+import { Type, ImagePlus } from 'lucide-react'
 import { DesignMethodToggle } from '@/components/toolbar/DesignMethodToggle'
 import { BackCardOptions } from '@/components/toolbar/BackCardOptions'
 import {
@@ -222,126 +223,114 @@ export function AddElementButtons() {
   )
 }
 
-/** Mobile-only add elements with side picker (no page jumping) */
+/** Mobile-only add elements with popover side picker (no layout shift) */
 export function MobileAddElements() {
   const { designMethod, setOpaqueWarning, setActiveSide } = useDesignStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [pending, setPending] = useState<'text' | 'image' | null>(null)
+  const [textOpen, setTextOpen] = useState(false)
+  const [imageOpen, setImageOpen] = useState(false)
 
   const isEngraved = designMethod === 'engraved'
 
-  const handleSidePick = (side: CardSide) => {
+  const handleAddText = (side: CardSide) => {
     const canvas = getCanvasForSide(side)
     if (!canvas) return
-
-    // Set as active canvas
     window.__fabricCanvas = canvas
     setActiveSide(side)
+    addTextToCanvas(canvas, isEngraved)
+    setTextOpen(false)
+  }
 
-    if (pending === 'text') {
-      addTextToCanvas(canvas, isEngraved)
-      setPending(null)
-    } else if (pending === 'image') {
-      // Store the side, then open file picker
-      fileInputRef.current?.click()
-    }
+  const handlePickImageSide = (side: CardSide) => {
+    const canvas = getCanvasForSide(side)
+    if (!canvas) return
+    window.__fabricCanvas = canvas
+    setActiveSide(side)
+    setImageOpen(false)
+    fileInputRef.current?.click()
   }
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file) {
-      setPending(null)
-      return
-    }
+    if (!file) return
 
     if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
       alert(`Unsupported file type. Please use JPG, PNG, GIF, SVG, or WebP.`)
       e.target.value = ''
-      setPending(null)
       return
     }
 
     if (file.size > MAX_FILE_SIZE) {
       alert(`File is too large. Maximum size is 10MB.`)
       e.target.value = ''
-      setPending(null)
       return
     }
 
     if (countImages() >= MAX_IMAGES) {
       alert(`Maximum of ${MAX_IMAGES} images allowed.`)
       e.target.value = ''
-      setPending(null)
       return
     }
 
     const canvas = window.__fabricCanvas
-    if (!canvas) {
-      setPending(null)
-      return
-    }
+    if (!canvas) return
 
     addImageToCanvas(canvas, file, isEngraved, setOpaqueWarning)
     e.target.value = ''
-    setPending(null)
   }
+
+  const sideButtons = (onPick: (side: CardSide) => void) => (
+    <div className="flex flex-col gap-1 min-w-[120px]">
+      <Button
+        onClick={() => onPick('front')}
+        variant="ghost"
+        size="sm"
+        className="justify-start"
+      >
+        Front
+      </Button>
+      <Button
+        onClick={() => onPick('back')}
+        variant="ghost"
+        size="sm"
+        className="justify-start"
+      >
+        Back
+      </Button>
+    </div>
+  )
 
   return (
     <div className="lg:hidden bg-card border border-border rounded-lg p-3 shadow-sm">
-      {!pending ? (
-        <div className="flex gap-1.5">
-          <Button
-            onClick={() => setPending('text')}
-            variant="outline"
-            size="sm"
-            className="flex-1 gap-1.5"
-          >
-            <Type className="size-3.5" />
-            Add Text
-          </Button>
-          <Button
-            onClick={() => setPending('image')}
-            variant="outline"
-            size="sm"
-            className="flex-1 gap-1.5"
-          >
-            <ImagePlus className="size-3.5" />
-            Add Image
-          </Button>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">
-              Add {pending} to:
-            </span>
-            <button
-              onClick={() => setPending(null)}
-              className="text-muted-foreground hover:text-foreground p-0.5 -mr-0.5"
-            >
-              <X className="size-3.5" />
-            </button>
-          </div>
-          <div className="flex gap-1.5">
-            <Button
-              onClick={() => handleSidePick('front')}
-              variant="outline"
-              size="sm"
-              className="flex-1"
-            >
-              Front
-            </Button>
-            <Button
-              onClick={() => handleSidePick('back')}
-              variant="outline"
-              size="sm"
-              className="flex-1"
-            >
-              Back
-            </Button>
-          </div>
-        </div>
-      )}
+      <div className="flex gap-1.5">
+        <Popover open={textOpen} onOpenChange={setTextOpen}>
+          <PopoverTrigger
+            render={
+              <Button variant="outline" size="sm" className="flex-1 gap-1.5">
+                <Type className="size-3.5" />
+                Add Text
+              </Button>
+            }
+          />
+          <PopoverContent className="w-auto p-1">
+            {sideButtons(handleAddText)}
+          </PopoverContent>
+        </Popover>
+
+        <Popover open={imageOpen} onOpenChange={setImageOpen}>
+          <PopoverTrigger
+            render={
+              <Button variant="outline" size="sm" className="flex-1 gap-1.5">
+                <ImagePlus className="size-3.5" />
+                Add Image
+              </Button>
+            }
+          />
+          <PopoverContent className="w-auto p-1">
+            {sideButtons(handlePickImageSide)}
+          </PopoverContent>
+        </Popover>
+      </div>
       <input
         ref={fileInputRef}
         type="file"
