@@ -503,11 +503,6 @@ export function DesignCanvas() {
       {/* Mobile add elements — always visible below both canvases */}
       {!cropping && <MobileAddElements />}
 
-      <div className="text-center">
-        <span className="text-[11px] text-muted-foreground">
-          CR80 — 85.6 × 53.98 mm
-        </span>
-      </div>
     </div>
   )
 }
