@@ -267,7 +267,7 @@ export async function exportDesignAsPdf(): Promise<void> {
     const values = cardData[i] || {}
     for (const obj of variableObjs) {
       const tagged = obj as Textbox & { _variableId?: string }
-      const value = values[tagged._variableId!] || tagged.text || ''
+      const value = values[tagged._variableId!] || ''
       const originalText = tagged.text
       tagged.set('text', value)
       renderTextToPdf(pdf, tagged, tagged.left || 0, tagged.top || 0, tagged.opacity ?? 1)
@@ -306,7 +306,7 @@ export async function exportDesignAsPdf(): Promise<void> {
       const values = cardData[i] || {}
       for (const obj of prodVariableObjs) {
         const tagged = obj as Textbox & { _variableId?: string }
-        const value = values[tagged._variableId!] || tagged.text || ''
+        const value = values[tagged._variableId!] || ''
         const originalText = tagged.text
         tagged.set('text', value)
         renderTextToPdf(pdf, tagged, tagged.left || 0, tagged.top || 0, tagged.opacity ?? 1, true)
