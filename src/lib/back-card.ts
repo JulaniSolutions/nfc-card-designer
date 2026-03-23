@@ -298,8 +298,8 @@ export function updateVariableTexts(canvas: Canvas, variableFields: VariableFiel
     markVariable(textObj, field.label, field.id)
     // Lock scaling — font size only changeable via layers panel
     textObj.set({ lockScalingX: true, lockScalingY: true })
-    // No side handles, no corners (scaling locked), keep rotation
-    textObj.setControlsVisibility({ ml: false, mr: false, mt: false, mb: false, tl: false, tr: false, bl: false, br: false, mtr: true })
+    // Side handles for text wrapping width, no corners (scaling locked), keep rotation
+    textObj.setControlsVisibility({ ml: true, mr: true, mt: false, mb: false, tl: false, tr: false, bl: false, br: false, mtr: true })
 
     // Sync canvas edits back to the store
     textObj.on('changed', () => {

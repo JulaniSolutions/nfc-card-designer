@@ -175,7 +175,7 @@ function CardCanvas({ side }: { side: CardSide }) {
             }
             obj.set({ lockScalingX: true, lockScalingY: true })
             obj.setControlsVisibility({
-              ml: false, mr: false, mt: false, mb: false,
+              ml: true, mr: true, mt: false, mb: false,
               tl: false, tr: false, bl: false, br: false,
               mtr: true,
             })

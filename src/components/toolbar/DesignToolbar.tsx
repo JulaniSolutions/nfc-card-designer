@@ -78,9 +78,9 @@ function addTextToCanvas(canvas: Canvas, isEngraved: boolean) {
     lockScalingX: true,
     lockScalingY: true,
   })
-  // Corner handles only (no side stretch), keep rotation
+  // Side handles for text wrapping width, no corners (scaling locked), keep rotation
   text.setControlsVisibility({
-    ml: false, mr: false, mt: false, mb: false,
+    ml: true, mr: true, mt: false, mb: false,
     tl: false, tr: false, bl: false, br: false,
     mtr: true,
   })
