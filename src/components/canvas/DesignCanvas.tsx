@@ -35,14 +35,16 @@ const CUSTOM_PROPS = [
 ]
 
 // Make selection controls more visible on light backgrounds
+// Larger handles on touch devices for easier grabbing
+const isTouch = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches
 InteractiveFabricObject.ownDefaults = {
   ...InteractiveFabricObject.ownDefaults,
   borderColor: '#2563eb',
   cornerColor: '#2563eb',
   cornerStrokeColor: '#ffffff',
   cornerStyle: 'circle' as const,
-  cornerSize: 28,
-  touchCornerSize: 88,
+  cornerSize: isTouch ? 28 : 12,
+  touchCornerSize: isTouch ? 88 : 28,
   borderScaleFactor: 1.5,
   transparentCorners: false,
 }

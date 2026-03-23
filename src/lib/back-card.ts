@@ -189,10 +189,16 @@ export function updateQrPlaceholder(canvas: Canvas) {
   tagged._undeletable = true
   tagged._layerLabel = 'QR Code'
   tagged._layerType = 'qr'
+  // Allow scaling up but not below original size; corners only, locked aspect ratio
   group.set({
-    lockScalingX: true,
-    lockScalingY: true,
+    lockUniScaling: true,
+    minScaleLimit: 1,
     lockRotation: true,
+  })
+  group.setControlsVisibility({
+    ml: false, mr: false, mt: false, mb: false,  // no side handles
+    tl: true, tr: true, bl: true, br: true,      // corner handles only
+    mtr: false,                                    // no rotation
   })
 
   canvas.add(group)
