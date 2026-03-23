@@ -159,6 +159,13 @@ function CardCanvas({ side }: { side: CardSide }) {
     const json = side === 'front' ? state.frontCanvasJson : state.backCanvasJson
     const parsed = safeParse(json)
     if (parsed) {
+      // Set crossOrigin on image objects so external Storage URLs load correctly
+      const objects = (parsed as Record<string, unknown>).objects as Record<string, unknown>[] | undefined
+      if (objects) {
+        for (const obj of objects) {
+          if (obj.type === 'image' || obj.src) obj.crossOrigin = 'anonymous'
+        }
+      }
       canvas.loadFromJSON(parsed).then(() => {
         // Normalize any scaled text objects (backward compat) and lock scaling
         for (const obj of canvas.getObjects()) {

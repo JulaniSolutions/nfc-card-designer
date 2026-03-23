@@ -5,6 +5,29 @@ import { getVariation } from '@/config/materials'
 const THUMB_WIDTH = 253
 const THUMB_HEIGHT = 160
 
+/** Timeout wrapper — resolves after ms even if the promise hangs */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
+  return Promise.race([
+    promise,
+    new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), ms)),
+  ])
+}
+
+/** Ensure crossOrigin is set on all image objects so external URLs load in canvas */
+function setCrossOriginOnImages(parsed: Record<string, unknown>) {
+  const objects = parsed.objects as Record<string, unknown>[] | undefined
+  if (!objects) return
+  for (const obj of objects) {
+    if (obj.type === 'image' || obj.src) {
+      obj.crossOrigin = 'anonymous'
+    }
+    // Handle groups with nested objects
+    if (obj.objects) {
+      setCrossOriginOnImages(obj as Record<string, unknown>)
+    }
+  }
+}
+
 export async function renderCanvasToImage(
   canvasJson: string | null,
   bgColor: string,
@@ -47,9 +70,10 @@ export async function renderCanvasToImage(
     }
 
     if (canvasJson) {
-
       const parsed = JSON.parse(canvasJson)
-      await tempCanvas.loadFromJSON(parsed)
+      setCrossOriginOnImages(parsed)
+      // Timeout after 10s — render what we have rather than hanging forever
+      await withTimeout(tempCanvas.loadFromJSON(parsed), 10_000)
     }
     tempCanvas.renderAll()
 
@@ -107,7 +131,6 @@ export async function renderThumbnail(
     }
 
     if (canvasJson) {
-
       const parsed = JSON.parse(canvasJson)
       // Scale objects to fit thumbnail
       const scaleX = THUMB_WIDTH / CARD_WIDTH
@@ -120,7 +143,8 @@ export async function renderThumbnail(
           obj.scaleY = (obj.scaleY ?? 1) * scaleY
         }
       }
-      await tempCanvas.loadFromJSON(parsed)
+      setCrossOriginOnImages(parsed)
+      await withTimeout(tempCanvas.loadFromJSON(parsed), 10_000)
     }
     tempCanvas.renderAll()
 
