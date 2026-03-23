@@ -41,8 +41,8 @@ InteractiveFabricObject.ownDefaults = {
   cornerColor: '#2563eb',
   cornerStrokeColor: '#ffffff',
   cornerStyle: 'circle' as const,
-  cornerSize: 10,
-  touchCornerSize: 24,
+  cornerSize: 14,
+  touchCornerSize: 44,
   borderScaleFactor: 1.5,
   transparentCorners: false,
 }
