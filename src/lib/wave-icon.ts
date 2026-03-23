@@ -91,6 +91,11 @@ export function addWaveIcon(canvas: Canvas, color: string) {
       tagged._layerLabel = 'NFC Icon'
       tagged._layerType = 'icon'
 
+      // Corner handles only, no side stretch
+      fabricImg.setControlsVisibility({
+        ml: false, mr: false, mt: false, mb: false,
+      })
+
       canvas.add(fabricImg)
       canvas.renderAll()
     }

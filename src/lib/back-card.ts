@@ -283,8 +283,7 @@ export function updateVariableTexts(canvas: Canvas, variableFields: VariableFiel
 
     // Create new variable text
     const pos = getVariablePosition(materialId, i)
-    // Start at half the available width — user can drag the right handle to resize for wrapping
-    const initialWidth = Math.round(maxWidth * 0.5)
+    const initialWidth = maxWidth
     const textObj = new Textbox(displayText, {
       fontSize: VARIABLE_FONT_SIZE,
       fontFamily: VARIABLE_FONT,
@@ -299,8 +298,8 @@ export function updateVariableTexts(canvas: Canvas, variableFields: VariableFiel
     markVariable(textObj, field.label, field.id)
     // Lock scaling — font size only changeable via layers panel
     textObj.set({ lockScalingX: true, lockScalingY: true })
-    // Enable right-side handle for width resizing (text wrapping), hide corners
-    textObj.setControlsVisibility({ ml: false, mr: true, mt: false, mb: false, tl: false, tr: false, bl: false, br: false, mtr: true })
+    // No side handles, no corners (scaling locked), keep rotation
+    textObj.setControlsVisibility({ ml: false, mr: false, mt: false, mb: false, tl: false, tr: false, bl: false, br: false, mtr: true })
 
     // Sync canvas edits back to the store
     textObj.on('changed', () => {
