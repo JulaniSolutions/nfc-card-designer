@@ -45,19 +45,6 @@ function getColor(): string {
   return getDefaultPrintColor()
 }
 
-function markLocked(obj: FabricObject, tag: string, layerLabel: string) {
-  const tagged = obj as FabricObject & Record<string, unknown>
-  tagged[tag] = true
-  tagged._isLocked = true
-  tagged._layerLabel = layerLabel
-  obj.set({
-    hasControls: false,
-    lockScalingX: true,
-    lockScalingY: true,
-    lockRotation: true,
-  })
-}
-
 function markVariable(obj: FabricObject, layerLabel: string, variableId: string) {
   const tagged = obj as FabricObject & Record<string, unknown>
   // Only the Name variable is undeletable; custom variables can be deleted from layers
@@ -196,7 +183,17 @@ export function updateQrPlaceholder(canvas: Canvas) {
     subTargetCheck: false,
     interactive: false,
   })
-  markLocked(group, QR_BORDER_TAG, 'QR Code')
+  // Mark as undeletable (not locked) so it appears as a normal expandable layer
+  const tagged = group as Group & Record<string, unknown>
+  tagged[QR_BORDER_TAG] = true
+  tagged._undeletable = true
+  tagged._layerLabel = 'QR Code'
+  tagged._layerType = 'qr'
+  group.set({
+    lockScalingX: true,
+    lockScalingY: true,
+    lockRotation: true,
+  })
 
   canvas.add(group)
 

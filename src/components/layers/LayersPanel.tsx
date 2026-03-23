@@ -57,7 +57,7 @@ function getWeightsForFont(fontFamily: string): typeof ALL_WEIGHTS[number][] {
 
 interface LayerInfo {
   object: FabricObject
-  type: 'text' | 'image' | 'icon'
+  type: 'text' | 'image' | 'icon' | 'qr'
   label: string
   locked: boolean
   undeletable: boolean
@@ -86,7 +86,7 @@ function getLayers(canvas: Canvas | null): LayerInfo[] {
       const undeletable = !!(obj as FabricObject & { _undeletable?: boolean })._undeletable
       const custom = obj as FabricObject & { _layerLabel?: string; _layerType?: string; _variableId?: string }
       if (custom._layerLabel) {
-        const layerType = (custom._layerType === 'icon' ? 'icon' : 'text') as LayerInfo['type']
+        const layerType = (custom._layerType === 'icon' ? 'icon' : custom._layerType === 'qr' ? 'qr' : 'text') as LayerInfo['type']
         return { object: obj, type: layerType, label: custom._layerLabel, locked, undeletable, variableId: custom._variableId }
       }
       if (obj instanceof FabricImage) {
@@ -297,8 +297,6 @@ export function LayersPanel() {
 
             // Locked layers: non-expandable row, no editing controls
             if (layer.locked) {
-              const LockedIcon = layer.label === 'QR Code' ? QrCode : Type
-              const isQr = layer.label === 'QR Code'
               return (
                 <div key={index}>
                   <div
@@ -308,42 +306,10 @@ export function LayersPanel() {
                     )}
                   >
                     <div className="size-3 shrink-0" />
-                    <LockedIcon className="size-3.5 text-muted-foreground shrink-0" />
+                    <Type className="size-3.5 text-muted-foreground shrink-0" />
                     <span className="text-xs truncate flex-1">{layer.label}</span>
                     <Lock className="size-3 text-muted-foreground/40 shrink-0" />
                   </div>
-                  {isSelected && (
-                    <div className="pl-7 pr-2 py-1.5">
-                      {isQr && (
-                        <p className="text-[10px] text-muted-foreground mb-1.5">
-                          The QR code placeholder cannot be deleted. Drag to reposition it.
-                        </p>
-                      )}
-                      <div className="flex items-center gap-1">
-                        <span className="text-[10px] text-muted-foreground shrink-0">Order</span>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="size-6"
-                          title="Move Up"
-                          disabled={index === 0}
-                          onClick={(e) => { e.stopPropagation(); handleBringForward(layer) }}
-                        >
-                          <ArrowUp className="size-2.5" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="size-6"
-                          title="Move Down"
-                          disabled={index === layers.length - 1}
-                          onClick={(e) => { e.stopPropagation(); handleSendBackward(layer) }}
-                        >
-                          <ArrowDown className="size-2.5" />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               )
             }
@@ -375,7 +341,9 @@ export function LayersPanel() {
                   </button>
 
                   {/* Icon */}
-                  {layer.type === 'icon' ? (
+                  {layer.type === 'qr' ? (
+                    <QrCode className="size-3.5 text-muted-foreground shrink-0" />
+                  ) : layer.type === 'icon' ? (
                     <Nfc className="size-3.5 text-muted-foreground shrink-0" />
                   ) : layer.type === 'text' ? (
                     <Type className="size-3.5 text-muted-foreground shrink-0" />
@@ -390,7 +358,11 @@ export function LayersPanel() {
                 {/* Expanded inline controls */}
                 {expandedIndex === index && (
                   <div className="pl-7 pr-2 py-2">
-                    {layer.type === 'icon' ? (
+                    {layer.type === 'qr' ? (
+                      <p className="text-[10px] text-muted-foreground">
+                        QR code is added automatically. Drag to reposition.
+                      </p>
+                    ) : layer.type === 'icon' ? (
                       <IconLayerControls
                         object={layer.object as FabricImage}
                         onUpdate={refreshLayers}
