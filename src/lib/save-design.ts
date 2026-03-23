@@ -61,12 +61,26 @@ export async function saveDesign(): Promise<string | null> {
       if (obj instanceof FabricImage && tagged._designId && !tagged._assetUrl) {
         // Extract image data and upload
         const el = (obj as FabricImage).getElement() as HTMLImageElement
-        const offscreen = document.createElement('canvas')
-        offscreen.width = el.naturalWidth || el.width
-        offscreen.height = el.naturalHeight || el.height
-        const ctx = offscreen.getContext('2d')!
-        ctx.drawImage(el, 0, 0)
-        const blob = await new Promise<Blob | null>((r) => offscreen.toBlob(r, 'image/png'))
+        const src = el.src
+        if (!src) continue
+        let blob: Blob | null = null
+        try {
+          const res = await fetch(src)
+          blob = await res.blob()
+        } catch {
+          // If fetch fails (e.g. revoked blob URL), fall back to canvas with timeout
+          const offscreen = document.createElement('canvas')
+          offscreen.width = el.naturalWidth || el.width
+          offscreen.height = el.naturalHeight || el.height
+          if (offscreen.width === 0 || offscreen.height === 0) continue
+          const ctx = offscreen.getContext('2d')!
+          ctx.drawImage(el, 0, 0)
+          blob = await new Promise<Blob | null>((resolve) => {
+            const timer = setTimeout(() => resolve(null), 5000)
+            offscreen.toBlob((b) => { clearTimeout(timer); resolve(b) }, 'image/png')
+          })
+          if (!blob) throw new Error('Failed to process image for upload. Please try again.')
+        }
         if (blob) {
           const file = new File([blob], tagged._assetName || 'image.png', { type: 'image/png' })
           const asset = await uploadOriginalAsset(file)
