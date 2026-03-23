@@ -73,10 +73,20 @@ function addTextToCanvas(canvas: Canvas, isEngraved: boolean) {
     top: canvas.height! / 2,
   })
 
-  // Show side handles for width resizing, hide top/bottom
+  // Lock scaling — font size is only changeable via layers panel
+  text.set({
+    lockScalingX: true,
+    lockScalingY: true,
+  })
+  // Show side handles for width resizing + rotation, hide corners
   text.setControlsVisibility({
     mt: false,
     mb: false,
+    tl: false,
+    tr: false,
+    bl: false,
+    br: false,
+    mtr: true,
   })
 
   canvas.add(text)

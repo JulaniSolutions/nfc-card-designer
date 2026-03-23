@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Canvas, FabricObject, FabricImage, InteractiveFabricObject } from 'fabric'
+import { Canvas, FabricObject, FabricImage, InteractiveFabricObject, Textbox, IText } from 'fabric'
 import { CARD_WIDTH, CARD_HEIGHT, CARD_CORNER_RADIUS } from '@/config/canvas'
 import { useDesignStore, type CardSide } from '@/store/design-store'
 import { getVariation } from '@/config/materials'
@@ -42,6 +42,7 @@ InteractiveFabricObject.ownDefaults = {
   cornerStrokeColor: '#ffffff',
   cornerStyle: 'circle' as const,
   cornerSize: 10,
+  touchCornerSize: 24,
   borderScaleFactor: 1.5,
   transparentCorners: false,
 }
@@ -156,7 +157,30 @@ function CardCanvas({ side }: { side: CardSide }) {
     const json = side === 'front' ? state.frontCanvasJson : state.backCanvasJson
     const parsed = safeParse(json)
     if (parsed) {
-      canvas.loadFromJSON(parsed).then(() => canvas.renderAll()).catch(console.error)
+      canvas.loadFromJSON(parsed).then(() => {
+        // Normalize any scaled text objects (backward compat) and lock scaling
+        for (const obj of canvas.getObjects()) {
+          if (obj instanceof Textbox || obj instanceof IText) {
+            const sx = obj.scaleX ?? 1
+            const sy = obj.scaleY ?? 1
+            if (sx !== 1 || sy !== 1) {
+              obj.set({
+                fontSize: Math.round((obj.fontSize || 36) * Math.max(sx, sy)),
+                scaleX: 1,
+                scaleY: 1,
+              })
+              obj.initDimensions()
+            }
+            obj.set({ lockScalingX: true, lockScalingY: true })
+            obj.setControlsVisibility({
+              mt: false, mb: false,
+              tl: false, tr: false, bl: false, br: false,
+              mtr: true,
+            })
+          }
+        }
+        canvas.renderAll()
+      }).catch(console.error)
     }
 
     return () => {

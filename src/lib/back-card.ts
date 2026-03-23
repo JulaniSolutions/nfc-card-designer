@@ -294,8 +294,10 @@ export function updateVariableTexts(canvas: Canvas, variableFields: VariableFiel
       editable: true,
     })
     markVariable(textObj, field.label, field.id)
-    // Enable right-side handle for width resizing (text wrapping), hide others
-    textObj.setControlsVisibility({ ml: false, mr: true, mt: false, mb: false })
+    // Lock scaling — font size only changeable via layers panel
+    textObj.set({ lockScalingX: true, lockScalingY: true })
+    // Enable right-side handle for width resizing (text wrapping), hide corners
+    textObj.setControlsVisibility({ ml: false, mr: true, mt: false, mb: false, tl: false, tr: false, bl: false, br: false, mtr: true })
 
     // Sync canvas edits back to the store
     textObj.on('changed', () => {

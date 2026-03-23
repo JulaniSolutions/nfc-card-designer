@@ -17,7 +17,9 @@ import {
   Lock,
   QrCode,
   Nfc,
-  ArrowRightLeft,
+  // ArrowRightLeft,
+  ArrowUp,
+  ArrowDown,
   Minus,
   Plus,
   AlignLeft,
@@ -216,6 +218,7 @@ export function LayersPanel() {
     refreshLayers()
   }
 
+  /* handleMoveToOtherSide — commented out, kept for future re-enablement
   const handleMoveToOtherSide = (layer: LayerInfo) => {
     if (layer.locked) return
     const { activeSide } = useDesignStore.getState()
@@ -226,23 +229,45 @@ export function LayersPanel() {
 
     if (!sourceCanvas || !targetCanvas) return
 
-    // Remove from source
     sourceCanvas.remove(layer.object)
     sourceCanvas.discardActiveObject()
     sourceCanvas.renderAll()
 
-    // Add to target
     targetCanvas.add(layer.object)
     targetCanvas.setActiveObject(layer.object)
     targetCanvas.renderAll()
 
-    // Switch to the other side
     const newSide = activeSide === 'front' ? 'back' : 'front'
     window.__fabricCanvas = targetCanvas
     useDesignStore.getState().setActiveSide(newSide)
 
     setExpandedIndex(null)
     refreshLayers()
+  }
+  */
+
+  const handleBringForward = (layer: LayerInfo) => {
+    const canvas = getActiveCanvas()
+    if (!canvas) return
+    const obj = layer.object
+    canvas.bringObjectForward(obj)
+    canvas.renderAll()
+    refreshLayers()
+    const updated = getLayers(canvas)
+    const newIdx = updated.findIndex((l) => l.object === obj)
+    if (newIdx !== -1) setExpandedIndex(newIdx)
+  }
+
+  const handleSendBackward = (layer: LayerInfo) => {
+    const canvas = getActiveCanvas()
+    if (!canvas) return
+    const obj = layer.object
+    canvas.sendObjectBackwards(obj)
+    canvas.renderAll()
+    refreshLayers()
+    const updated = getLayers(canvas)
+    const newIdx = updated.findIndex((l) => l.object === obj)
+    if (newIdx !== -1) setExpandedIndex(newIdx)
   }
 
   const toggleExpand = (index: number) => {
@@ -357,7 +382,33 @@ export function LayersPanel() {
                         onUpdate={refreshLayers}
                       />
                     )}
-                    {/* Move to other side — not for undeletable (back-only) elements */}
+                    {/* Layer ordering */}
+                    {!layer.undeletable && (
+                      <div className="flex items-center gap-1 mt-2 mb-1">
+                        <span className="text-[10px] text-muted-foreground shrink-0">Order</span>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="size-6"
+                          title="Move Up"
+                          disabled={index === 0}
+                          onClick={(e) => { e.stopPropagation(); handleBringForward(layer) }}
+                        >
+                          <ArrowUp className="size-2.5" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="size-6"
+                          title="Move Down"
+                          disabled={index === layers.length - 1}
+                          onClick={(e) => { e.stopPropagation(); handleSendBackward(layer) }}
+                        >
+                          <ArrowDown className="size-2.5" />
+                        </Button>
+                      </div>
+                    )}
+                    {/* Move to other side — commented out to avoid confusion with layer ordering
                     {!layer.undeletable && (
                       <Button
                         onClick={() => handleMoveToOtherSide(layer)}
@@ -369,6 +420,7 @@ export function LayersPanel() {
                         Move to {activeSide === 'front' ? 'Back' : 'Front'}
                       </Button>
                     )}
+                    */}
                     {/* Delete */}
                     {!layer.undeletable && (
                       <Button
@@ -503,6 +555,9 @@ function TextLayerControls({
         >
           <Minus className="size-2.5" />
         </Button>
+        <span className="text-[11px] text-foreground tabular-nums min-w-[36px] text-center">
+          {Math.round(object.fontSize)}px
+        </span>
         <Button
           variant="outline"
           size="icon"
