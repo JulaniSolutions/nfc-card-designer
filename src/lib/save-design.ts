@@ -92,12 +92,19 @@ export async function saveDesign(): Promise<string | null> {
     }
   }
 
-  // Re-save canvas JSON after asset URLs have been added
-  if (window.__fabricCanvasFront) {
-    storeState.setCanvasJson('front', JSON.stringify(window.__fabricCanvasFront.toObject(CUSTOM_PROPS)))
-  }
-  if (window.__fabricCanvasBack) {
-    storeState.setCanvasJson('back', JSON.stringify(window.__fabricCanvasBack.toObject(CUSTOM_PROPS)))
+  // Re-save canvas JSON after asset URLs have been added,
+  // replacing base64 image src with Storage URLs to keep JSON small
+  for (const [side, canvas] of [['front', window.__fabricCanvasFront], ['back', window.__fabricCanvasBack]] as const) {
+    if (!canvas) continue
+    const json = canvas.toObject(CUSTOM_PROPS)
+    if (json.objects) {
+      for (const obj of json.objects) {
+        if (obj._assetUrl && obj.src && obj.src.startsWith('data:')) {
+          obj.src = obj._assetUrl
+        }
+      }
+    }
+    storeState.setCanvasJson(side, JSON.stringify(json))
   }
 
   const state = useDesignStore.getState()
