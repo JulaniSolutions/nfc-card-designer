@@ -132,7 +132,7 @@ function removeAllPlaceholders(canvas: Canvas) {
     // Ghost QR border: transparent Rect with dashed stroke (from old serialization)
     if (obj instanceof Rect && obj.fill === 'transparent' && obj.strokeDashArray?.length) return true
     // Ghost QR label: non-editable Textbox with text "QR Code"
-    if (obj instanceof Textbox && ((obj as Textbox).text === 'QR Code' || (obj as Textbox).text === 'Your QR') && !(obj as Textbox).editable) return true
+    if (obj instanceof Textbox && ((obj as Textbox).text === 'QR Code' || (obj as Textbox).text === 'Your QR' || (obj as Textbox).text === 'QR code added\nautomatically') && !(obj as Textbox).editable) return true
     // Ghost name text (from old serialization before _undeletable was added)
     if (obj instanceof Textbox && (obj as Textbox).text === 'Your Name Here' && obj.originY === 'center' && obj.left === 60 && !custom._undeletable) return true
     // Ghost groups (serialized Group objects)
@@ -173,7 +173,7 @@ export function updateQrPlaceholder(canvas: Canvas) {
   })
 
   // Create label
-  const label = new Textbox('Your QR', {
+  const label = new Textbox('QR code added\nautomatically', {
     fontSize: 22,
     fontFamily: QR_LABEL_FONT,
     fill: color,

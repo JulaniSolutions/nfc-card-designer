@@ -312,10 +312,37 @@ export function LayersPanel() {
                     <span className="text-xs truncate flex-1">{layer.label}</span>
                     <Lock className="size-3 text-muted-foreground/40 shrink-0" />
                   </div>
-                  {isSelected && isQr && (
-                    <p className="text-[10px] text-muted-foreground pl-7 pr-2 py-1.5">
-                      The QR code placeholder cannot be deleted. Drag to reposition it.
-                    </p>
+                  {isSelected && (
+                    <div className="pl-7 pr-2 py-1.5">
+                      {isQr && (
+                        <p className="text-[10px] text-muted-foreground mb-1.5">
+                          The QR code placeholder cannot be deleted. Drag to reposition it.
+                        </p>
+                      )}
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] text-muted-foreground shrink-0">Order</span>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="size-6"
+                          title="Move Up"
+                          disabled={index === 0}
+                          onClick={(e) => { e.stopPropagation(); handleBringForward(layer) }}
+                        >
+                          <ArrowUp className="size-2.5" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="size-6"
+                          title="Move Down"
+                          disabled={index === layers.length - 1}
+                          onClick={(e) => { e.stopPropagation(); handleSendBackward(layer) }}
+                        >
+                          <ArrowDown className="size-2.5" />
+                        </Button>
+                      </div>
+                    </div>
                   )}
                 </div>
               )
@@ -383,31 +410,29 @@ export function LayersPanel() {
                       />
                     )}
                     {/* Layer ordering */}
-                    {!layer.undeletable && (
-                      <div className="flex items-center gap-1 mt-2 mb-1">
-                        <span className="text-[10px] text-muted-foreground shrink-0">Order</span>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="size-6"
-                          title="Move Up"
-                          disabled={index === 0}
-                          onClick={(e) => { e.stopPropagation(); handleBringForward(layer) }}
-                        >
-                          <ArrowUp className="size-2.5" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="size-6"
-                          title="Move Down"
-                          disabled={index === layers.length - 1}
-                          onClick={(e) => { e.stopPropagation(); handleSendBackward(layer) }}
-                        >
-                          <ArrowDown className="size-2.5" />
-                        </Button>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-1 mt-2 mb-1">
+                      <span className="text-[10px] text-muted-foreground shrink-0">Order</span>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="size-6"
+                        title="Move Up"
+                        disabled={index === 0}
+                        onClick={(e) => { e.stopPropagation(); handleBringForward(layer) }}
+                      >
+                        <ArrowUp className="size-2.5" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="size-6"
+                        title="Move Down"
+                        disabled={index === layers.length - 1}
+                        onClick={(e) => { e.stopPropagation(); handleSendBackward(layer) }}
+                      >
+                        <ArrowDown className="size-2.5" />
+                      </Button>
+                    </div>
                     {/* Move to other side — commented out to avoid confusion with layer ordering
                     {!layer.undeletable && (
                       <Button
