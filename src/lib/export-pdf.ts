@@ -40,8 +40,8 @@ function toJsPdfFont(fontFamily: string): string {
 function renderTextToPdf(
   pdf: jsPDF,
   textObj: Textbox | IText,
-  posX: number,
-  posY: number,
+  _posX: number,
+  _posY: number,
   opacity: number,
   productionMode = false,
 ) {
@@ -64,29 +64,34 @@ function renderTextToPdf(
     pdf.setGState(pdf.GState({ opacity }))
   }
 
-  let x = pxToMmX(posX, CARD_WIDTH_MM)
-  let y = pxToMmY(posY, CARD_HEIGHT_MM)
+  // Use Fabric's bounding rect for accurate positioning — it accounts for
+  // originX/originY, wrapping, and scaling, giving us the top-left corner
+  const bounds = textObj.getBoundingRect()
+  const boxLeftMm = pxToMmX(bounds.left, CARD_WIDTH_MM)
+  const boxTopMm = pxToMmY(bounds.top, CARD_HEIGHT_MM)
+  const boxWidthMm = pxToMmX(bounds.width, CARD_WIDTH_MM)
 
-  const originX = textObj.originX || 'left'
-  const originY = textObj.originY || 'top'
-
-  if (originY === 'center') {
-    y += fontSizeMm * 0.35
-  } else {
-    y += fontSizeMm
-  }
-
-  let align: 'left' | 'center' | 'right' = 'left'
-  if (textObj.textAlign === 'center' || originX === 'center') {
-    align = 'center'
-  } else if (textObj.textAlign === 'right') {
-    align = 'right'
-  }
-
-  const lines = text.split('\n')
+  // Use Fabric's pre-wrapped lines (textLines) instead of splitting raw text
+  // textLines contains the visually wrapped lines as displayed on canvas
+  const lines = textObj.textLines || text.split('\n')
   const lineHeightMm = fontSizeMm * (textObj.lineHeight || 1.16)
+
+  const textAlign = textObj.textAlign || 'left'
+
   for (let li = 0; li < lines.length; li++) {
-    pdf.text(lines[li], x, y + li * lineHeightMm, { align })
+    const lineY = boxTopMm + fontSizeMm + li * lineHeightMm
+    let lineX: number
+
+    if (textAlign === 'center') {
+      lineX = boxLeftMm + boxWidthMm / 2
+    } else if (textAlign === 'right') {
+      lineX = boxLeftMm + boxWidthMm
+    } else {
+      lineX = boxLeftMm
+    }
+
+    const align = textAlign as 'left' | 'center' | 'right'
+    pdf.text(lines[li], lineX, lineY, { align })
   }
 
   if (opacity < 1) {
