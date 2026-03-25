@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 import {
   isTurnstileEnabled,
   getTurnstileSiteKey,
@@ -20,27 +20,28 @@ interface TurnstileWidgetProps {
 export function TurnstileWidget({ onToken, onError }: TurnstileWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const widgetIdRef = useRef<string | null>(null)
-  const mountedRef = useRef(true)
+  const onTokenRef = useRef(onToken)
+  const onErrorRef = useRef(onError)
 
-  const stableOnToken = useCallback(onToken, [onToken])
-  const stableOnError = useCallback(() => onError?.(), [onError])
+  // Keep refs current without triggering re-renders
+  onTokenRef.current = onToken
+  onErrorRef.current = onError
 
   useEffect(() => {
-    mountedRef.current = true
+    let mounted = true
+    let turnstile: TurnstileApi | null = null
 
     if (!isTurnstileEnabled()) {
-      stableOnError()
+      onErrorRef.current?.()
       return
     }
 
-    let turnstile: TurnstileApi | null = null
-
     loadTurnstileScript().then(() => {
-      if (!mountedRef.current) return
+      if (!mounted) return
 
       turnstile = getTurnstileApi()
       if (!turnstile || !containerRef.current) {
-        stableOnError()
+        onErrorRef.current?.()
         return
       }
 
@@ -49,19 +50,19 @@ export function TurnstileWidget({ onToken, onError }: TurnstileWidgetProps) {
         sitekey,
         size: 'normal',
         callback: (token: string) => {
-          if (mountedRef.current) stableOnToken(token)
+          if (mounted) onTokenRef.current(token)
         },
         'error-callback': () => {
-          if (mountedRef.current) stableOnError()
+          if (mounted) onErrorRef.current?.()
         },
         'expired-callback': () => {
-          if (mountedRef.current) stableOnError()
+          if (mounted) onErrorRef.current?.()
         },
       })
     })
 
     return () => {
-      mountedRef.current = false
+      mounted = false
       if (widgetIdRef.current && turnstile) {
         try {
           turnstile.remove(widgetIdRef.current)
@@ -71,7 +72,7 @@ export function TurnstileWidget({ onToken, onError }: TurnstileWidgetProps) {
         widgetIdRef.current = null
       }
     }
-  }, [stableOnToken, stableOnError])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- runs once on mount, callbacks accessed via refs
 
   if (!isTurnstileEnabled()) return null
 
