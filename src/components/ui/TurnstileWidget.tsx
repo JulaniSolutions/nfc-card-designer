@@ -8,9 +8,11 @@ import {
 import type { TurnstileApi } from '@/lib/turnstile'
 
 interface TurnstileWidgetProps {
-  onToken: (token: string) => void
+  onToken: (token: string | null) => void
   onError?: () => void
 }
+
+const WIDGET_TIMEOUT_MS = 10_000
 
 /**
  * Managed-mode Turnstile widget.
@@ -36,11 +38,20 @@ export function TurnstileWidget({ onToken, onError }: TurnstileWidgetProps) {
       return
     }
 
+    // Timeout: if widget hasn't resolved after WIDGET_TIMEOUT_MS, let the user proceed without a token
+    const timeout = setTimeout(() => {
+      if (mounted) {
+        onTokenRef.current(null)
+        onErrorRef.current?.()
+      }
+    }, WIDGET_TIMEOUT_MS)
+
     loadTurnstileScript().then(() => {
       if (!mounted) return
 
       turnstile = getTurnstileApi()
       if (!turnstile || !containerRef.current) {
+        clearTimeout(timeout)
         onErrorRef.current?.()
         return
       }
@@ -50,19 +61,30 @@ export function TurnstileWidget({ onToken, onError }: TurnstileWidgetProps) {
         sitekey,
         size: 'normal',
         callback: (token: string) => {
-          if (mounted) onTokenRef.current(token)
+          if (mounted) {
+            clearTimeout(timeout)
+            onTokenRef.current(token)
+          }
         },
         'error-callback': () => {
-          if (mounted) onErrorRef.current?.()
+          if (mounted) {
+            clearTimeout(timeout)
+            onErrorRef.current?.()
+          }
         },
         'expired-callback': () => {
-          if (mounted) onErrorRef.current?.()
+          // Token expired — clear it so we don't send a stale token
+          if (mounted) {
+            onTokenRef.current(null)
+            onErrorRef.current?.()
+          }
         },
       })
     })
 
     return () => {
       mounted = false
+      clearTimeout(timeout)
       if (widgetIdRef.current && turnstile) {
         try {
           turnstile.remove(widgetIdRef.current)

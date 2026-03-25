@@ -220,7 +220,7 @@ export function ActionBar() {
               </div>
               <TurnstileWidget
                 onToken={(token) => { setTurnstileToken(token); setTurnstileReady(true) }}
-                onError={() => setTurnstileReady(true)}
+                onError={() => { setTurnstileToken(null); setTurnstileReady(true) }}
               />
               <Button
                 onClick={handleConfirmShare}
