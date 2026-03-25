@@ -1,6 +1,5 @@
 import { isSupabaseConfigured, supabase } from './supabase'
 import { useDesignStore } from '@/store/design-store'
-import { getTurnstileToken } from './turnstile'
 import { addDesignToHistory } from './design-history'
 import { uploadOriginalAsset } from './upload-asset'
 import { FabricImage } from 'fabric'
@@ -38,7 +37,7 @@ function getEdgeFunctionUrl(name: string): string {
   return `${supabaseUrl}/functions/v1/${name}`
 }
 
-export async function saveDesign(): Promise<string | null> {
+export async function saveDesign(turnstileToken?: string | null): Promise<string | null> {
   if (!isSupabaseConfigured()) {
     console.warn('Supabase not configured — design not saved')
     return null
@@ -109,9 +108,6 @@ export async function saveDesign(): Promise<string | null> {
 
   const state = useDesignStore.getState()
   const { materialId, variationId, frontCanvasJson, backCanvasJson, frontBgColor, backBgColor, designId, designName, designMethod, backOption, cardNames, variableFields, cardData, quantity } = state
-
-  // Get Turnstile CAPTCHA token
-  const turnstileToken = await getTurnstileToken()
 
   const payload = {
     design_id: designId || undefined,

@@ -1,12 +1,15 @@
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined
 
 let scriptLoaded = false
+let scriptFailed = false
 
 /**
  * Load the Turnstile script if not already loaded.
+ * Resolves even on failure so callers can gracefully degrade.
  */
-function loadScript(): Promise<void> {
+export function loadTurnstileScript(): Promise<void> {
   if (scriptLoaded) return Promise.resolve()
+  if (scriptFailed) return Promise.resolve()
   if (document.querySelector('script[src*="turnstile"]')) {
     scriptLoaded = true
     return Promise.resolve()
@@ -22,8 +25,14 @@ function loadScript(): Promise<void> {
     }
     // Brave and other privacy browsers may silently block the script
     // without firing onerror — use a timeout as a fallback
-    script.onerror = () => resolve()
-    setTimeout(() => resolve(), 3000)
+    script.onerror = () => {
+      scriptFailed = true
+      resolve()
+    }
+    setTimeout(() => {
+      if (!scriptLoaded) scriptFailed = true
+      resolve()
+    }, 5000)
     document.head.appendChild(script)
   })
 }
@@ -36,22 +45,52 @@ export function isTurnstileEnabled(): boolean {
 }
 
 /**
- * Get a Turnstile verification token.
- * Uses invisible mode — no user interaction required unless challenged.
- * Returns null if Turnstile is not configured.
+ * Get the configured site key (for use by the widget component).
+ */
+export function getTurnstileSiteKey(): string | undefined {
+  return TURNSTILE_SITE_KEY
+}
+
+/**
+ * Get a reference to the Turnstile API on window (after script load).
+ */
+export function getTurnstileApi(): TurnstileApi | null {
+  return (window as unknown as { turnstile?: TurnstileApi }).turnstile ?? null
+}
+
+/**
+ * Get a Turnstile verification token via invisible widget.
+ * Used for flows without a visible dialog (e.g. email sending, re-saves).
+ * Returns null if Turnstile is not configured or can't load.
  */
 export async function getTurnstileToken(): Promise<string | null> {
   if (!TURNSTILE_SITE_KEY) return null
 
-  await loadScript()
+  await loadTurnstileScript()
 
-  const turnstile = (window as unknown as { turnstile: TurnstileApi }).turnstile
+  const turnstile = getTurnstileApi()
   if (!turnstile) return null
 
+  // Try up to 2 attempts with increasing timeout
+  for (const timeout of [5000, 8000]) {
+    const token = await attemptInvisibleToken(turnstile, TURNSTILE_SITE_KEY, timeout)
+    if (token) return token
+  }
+
+  return null
+}
+
+function attemptInvisibleToken(
+  turnstile: TurnstileApi,
+  sitekey: string,
+  timeoutMs: number,
+): Promise<string | null> {
   return new Promise((resolve) => {
-    // Create a temporary container for the invisible widget
     const container = document.createElement('div')
-    container.style.display = 'none'
+    // Position off-screen but not display:none so Turnstile can render
+    container.style.position = 'fixed'
+    container.style.top = '-9999px'
+    container.style.left = '-9999px'
     document.body.appendChild(container)
 
     let resolved = false
@@ -59,17 +98,16 @@ export async function getTurnstileToken(): Promise<string | null> {
       if (container.parentNode) document.body.removeChild(container)
     }
 
-    // Timeout after 5s — skip CAPTCHA rather than hang forever
     const timer = setTimeout(() => {
       if (!resolved) {
         resolved = true
         cleanup()
         resolve(null)
       }
-    }, 5000)
+    }, timeoutMs)
 
     turnstile.render(container, {
-      sitekey: TURNSTILE_SITE_KEY,
+      sitekey,
       size: 'invisible',
       callback: (token: string) => {
         if (!resolved) {
@@ -99,7 +137,7 @@ export async function getTurnstileToken(): Promise<string | null> {
   })
 }
 
-interface TurnstileApi {
+export interface TurnstileApi {
   render: (
     container: HTMLElement,
     options: {
@@ -110,4 +148,5 @@ interface TurnstileApi {
       'expired-callback'?: () => void
     }
   ) => string
+  remove: (widgetId: string) => void
 }

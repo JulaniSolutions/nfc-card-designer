@@ -17,7 +17,8 @@ function getCorsHeaders(req: Request) {
 // In-memory IP rate limiting (per edge function instance)
 const ipRequests = new Map<string, number[]>()
 const RATE_LIMIT_WINDOW_MS = 60_000 // 1 minute
-const RATE_LIMIT_MAX = 10 // max 10 saves per minute per IP
+const RATE_LIMIT_MAX = 10 // max 10 saves per minute per IP (with valid CAPTCHA)
+const RATE_LIMIT_MAX_UNVERIFIED = 3 // stricter limit when CAPTCHA is unavailable
 
 const MAX_CANVAS_JSON_BYTES = 2_000_000 // 2MB per canvas field
 const MAX_BODY_BYTES = 5_000_000 // 5MB total body
@@ -31,12 +32,12 @@ function getClientIp(req: Request): string {
   )
 }
 
-function isRateLimited(ip: string): boolean {
+function isRateLimited(ip: string, maxRequests: number = RATE_LIMIT_MAX): boolean {
   const now = Date.now()
   const timestamps = ipRequests.get(ip) || []
   // Remove entries outside the window
   const recent = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS)
-  if (recent.length >= RATE_LIMIT_MAX) {
+  if (recent.length >= maxRequests) {
     ipRequests.set(ip, recent)
     return true
   }
@@ -89,18 +90,24 @@ Deno.serve(async (req) => {
     // Verify Turnstile CAPTCHA
     const turnstileToken = body.turnstile_token
     if (Deno.env.get('TURNSTILE_SECRET_KEY')) {
-      if (!turnstileToken) {
-        return new Response(
-          JSON.stringify({ error: 'CAPTCHA verification required.' }),
-          { headers: { ...cors, 'Content-Type': 'application/json' }, status: 403 }
-        )
-      }
-      const valid = await verifyTurnstile(turnstileToken)
-      if (!valid) {
-        return new Response(
-          JSON.stringify({ error: 'CAPTCHA verification failed.' }),
-          { headers: { ...cors, 'Content-Type': 'application/json' }, status: 403 }
-        )
+      if (turnstileToken) {
+        // Token provided — verify it. Reject fake/invalid tokens (catches bots).
+        const valid = await verifyTurnstile(turnstileToken)
+        if (!valid) {
+          return new Response(
+            JSON.stringify({ error: 'CAPTCHA verification failed.' }),
+            { headers: { ...cors, 'Content-Type': 'application/json' }, status: 403 }
+          )
+        }
+      } else {
+        // No token (ad blocker, privacy browser, slow network).
+        // Allow but apply stricter rate limit to prevent abuse.
+        if (isRateLimited(ip, RATE_LIMIT_MAX_UNVERIFIED)) {
+          return new Response(
+            JSON.stringify({ error: 'Too many requests. Please try again later.' }),
+            { headers: { ...cors, 'Content-Type': 'application/json' }, status: 429 }
+          )
+        }
       }
     }
 

@@ -14,6 +14,8 @@ import { saveDesign } from '@/lib/save-design'
 import { exportDesignAsPdf } from '@/lib/export-pdf'
 import { isSupabaseConfigured } from '@/lib/supabase'
 import { sendDesignEmail } from '@/lib/send-design-email'
+import { TurnstileWidget } from '@/components/ui/TurnstileWidget'
+import { isTurnstileEnabled, getTurnstileToken } from '@/lib/turnstile'
 import { Save, Share2, FileDown, Copy, Check, Mail, Loader2 } from 'lucide-react'
 
 function slugify(text: string): string {
@@ -43,6 +45,8 @@ export function ActionBar() {
   const [emailSending, setEmailSending] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
   const [emailError, setEmailError] = useState<string | null>(null)
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const [turnstileReady, setTurnstileReady] = useState(!isTurnstileEnabled())
 
   const handleShare = async () => {
     if (!isSupabaseConfigured()) {
@@ -56,6 +60,8 @@ export function ActionBar() {
     setEmailSent(false)
     setEmailError(null)
     setNameInput(designName)
+    setTurnstileToken(null)
+    setTurnstileReady(!isTurnstileEnabled())
 
     // If design was already saved, skip name step — show link immediately
     if (designId) {
@@ -75,7 +81,7 @@ export function ActionBar() {
       // Wait a tick for store to update before saving
       useDesignStore.getState().designName = nameInput
       useDesignStore.getState().setSaving(true)
-      const id = await saveDesign()
+      const id = await saveDesign(turnstileToken)
       if (id) {
         setShareUrl(buildShareUrl(id, nameInput))
       }
@@ -93,7 +99,8 @@ export function ActionBar() {
     try {
       setError(null)
       useDesignStore.getState().setSaving(true)
-      await saveDesign()
+      const token = await getTurnstileToken()
+      await saveDesign(token)
       // Open share dialog after successful save
       const { designId: id, designName: name } = useDesignStore.getState()
       if (id) {
@@ -211,9 +218,13 @@ export function ActionBar() {
                   className="text-sm"
                 />
               </div>
+              <TurnstileWidget
+                onToken={(token) => { setTurnstileToken(token); setTurnstileReady(true) }}
+                onError={() => setTurnstileReady(true)}
+              />
               <Button
                 onClick={handleConfirmShare}
-                disabled={isSaving}
+                disabled={isSaving || !turnstileReady}
                 className="w-full h-8"
                 size="sm"
               >
