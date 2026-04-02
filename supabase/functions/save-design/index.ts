@@ -50,13 +50,23 @@ async function verifyTurnstile(token: string): Promise<boolean> {
   const secret = Deno.env.get('TURNSTILE_SECRET_KEY')
   if (!secret) return true // Skip if not configured
 
-  const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ secret, response: token }),
-  })
-  const data = await res.json()
-  return data.success === true
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 5000)
+  try {
+    const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ secret, response: token }),
+      signal: controller.signal,
+    })
+    const data = await res.json()
+    return data.success === true
+  } catch {
+    // Fail closed — don't bypass CAPTCHA when Cloudflare is unreachable
+    return false
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 Deno.serve(async (req) => {
@@ -67,14 +77,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Rate limit by IP
     const ip = getClientIp(req)
-    if (isRateLimited(ip)) {
-      return new Response(
-        JSON.stringify({ error: 'Too many requests. Please try again later.' }),
-        { headers: { ...cors, 'Content-Type': 'application/json' }, status: 429 }
-      )
-    }
 
     // Check body size before parsing
     const contentLength = req.headers.get('content-length')
@@ -87,11 +90,11 @@ Deno.serve(async (req) => {
 
     const body = await req.json()
 
-    // Verify Turnstile CAPTCHA
+    // Determine rate limit threshold based on CAPTCHA status, then check once
+    let rateLimit = RATE_LIMIT_MAX
     const turnstileToken = body.turnstile_token
     if (Deno.env.get('TURNSTILE_SECRET_KEY')) {
       if (turnstileToken) {
-        // Token provided — verify it. Reject fake/invalid tokens (catches bots).
         const valid = await verifyTurnstile(turnstileToken)
         if (!valid) {
           return new Response(
@@ -100,15 +103,16 @@ Deno.serve(async (req) => {
           )
         }
       } else {
-        // No token (ad blocker, privacy browser, slow network).
-        // Allow but apply stricter rate limit to prevent abuse.
-        if (isRateLimited(ip, RATE_LIMIT_MAX_UNVERIFIED)) {
-          return new Response(
-            JSON.stringify({ error: 'Too many requests. Please try again later.' }),
-            { headers: { ...cors, 'Content-Type': 'application/json' }, status: 429 }
-          )
-        }
+        // No token (ad blocker, privacy browser, slow network) — stricter limit
+        rateLimit = RATE_LIMIT_MAX_UNVERIFIED
       }
+    }
+
+    if (isRateLimited(ip, rateLimit)) {
+      return new Response(
+        JSON.stringify({ error: 'Too many requests. Please try again later.' }),
+        { headers: { ...cors, 'Content-Type': 'application/json' }, status: 429 }
+      )
     }
 
     const {
@@ -172,40 +176,24 @@ Deno.serve(async (req) => {
       updated_at: new Date().toISOString(),
     }
 
-    // Update existing design
-    if (design_id) {
-      const { data, error } = await supabase
-        .from('designs')
-        .update(payload)
-        .eq('design_id', design_id)
-        .select('design_id')
-        .single()
-
-      if (error) throw error
-      return new Response(JSON.stringify(data), {
-        headers: { ...cors, 'Content-Type': 'application/json' },
-      })
+    if (!design_id) {
+      return new Response(
+        JSON.stringify({ error: 'Missing design_id.' }),
+        { headers: { ...cors, 'Content-Type': 'application/json' }, status: 400 }
+      )
     }
 
-    // Generate short ID for new design (crypto-secure)
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
-    const randomBytes = new Uint8Array(8)
-    crypto.getRandomValues(randomBytes)
-    let shortId = ''
-    for (let i = 0; i < 8; i++) {
-      shortId += chars[randomBytes[i] % chars.length]
-    }
-
+    // Upsert: insert if new, update if exists — prevents duplicates on retry
     const { data, error } = await supabase
       .from('designs')
-      .insert({ design_id: shortId, ...payload })
+      .upsert({ design_id, ...payload }, { onConflict: 'design_id' })
       .select('design_id')
       .single()
 
     if (error) throw error
+
     return new Response(JSON.stringify(data), {
       headers: { ...cors, 'Content-Type': 'application/json' },
-      status: 201,
     })
   } catch (error) {
     return new Response(JSON.stringify({ error: (error as Error).message }), {

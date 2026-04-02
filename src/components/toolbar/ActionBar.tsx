@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -16,7 +16,7 @@ import { isSupabaseConfigured } from '@/lib/supabase'
 import { sendDesignEmail } from '@/lib/send-design-email'
 import { TurnstileWidget } from '@/components/ui/TurnstileWidget'
 import { isTurnstileEnabled, getTurnstileToken } from '@/lib/turnstile'
-import { Save, Share2, FileDown, Copy, Check, Mail, Loader2 } from 'lucide-react'
+import { Save, Share2, FileDown, Copy, Check, Mail, Loader2, AlertCircle, RefreshCw } from 'lucide-react'
 
 function slugify(text: string): string {
   return text
@@ -34,11 +34,15 @@ function buildShareUrl(id: string, name: string): string {
   return `${window.location.origin}${path}`
 }
 
+const SAFETY_TIMEOUT_MS = 120_000
+
 export function ActionBar() {
   const { isSaving, designId, designName, setDesignName, hasUnsavedChanges } = useDesignStore()
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
   const [shareUrl, setShareUrl] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [failCount, setFailCount] = useState(0)
   const [copied, setCopied] = useState(false)
   const [nameInput, setNameInput] = useState('')
   const [emailTo, setEmailTo] = useState('')
@@ -47,6 +51,15 @@ export function ActionBar() {
   const [emailError, setEmailError] = useState<string | null>(null)
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [turnstileReady, setTurnstileReady] = useState(!isTurnstileEnabled())
+  const [turnstileKey, setTurnstileKey] = useState(0)
+  const safetyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const clearSafetyTimer = useCallback(() => {
+    if (safetyTimerRef.current) {
+      clearTimeout(safetyTimerRef.current)
+      safetyTimerRef.current = null
+    }
+  }, [])
 
   const handleShare = async () => {
     if (!isSupabaseConfigured()) {
@@ -59,9 +72,12 @@ export function ActionBar() {
     setEmailTo('')
     setEmailSent(false)
     setEmailError(null)
+    setSaveError(null)
+    setFailCount(0)
     setNameInput(designName)
     setTurnstileToken(null)
     setTurnstileReady(!isTurnstileEnabled())
+    setTurnstileKey((k) => k + 1)
 
     // If design was already saved, skip name step — show link immediately
     if (designId) {
@@ -75,26 +91,46 @@ export function ActionBar() {
   }
 
   const handleConfirmShare = async () => {
+    clearSafetyTimer()
+
+    // Safety timeout — guarantees button can NEVER get permanently stuck
+    safetyTimerRef.current = setTimeout(() => {
+      useDesignStore.getState().setSaving(false)
+      setSaveError('Save timed out. Please try again.')
+      setFailCount((c) => c + 1)
+    }, SAFETY_TIMEOUT_MS)
+
     try {
-      setError(null)
+      setSaveError(null)
       setDesignName(nameInput)
-      // Wait a tick for store to update before saving
-      useDesignStore.getState().designName = nameInput
       useDesignStore.getState().setSaving(true)
       const id = await saveDesign(turnstileToken)
       if (id) {
         setShareUrl(buildShareUrl(id, nameInput))
+        setFailCount(0)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
-      setShareDialogOpen(false)
+      const message = err instanceof Error ? err.message : 'Failed to save'
+      setSaveError(message)
+      setFailCount((c) => c + 1)
+      // Force Turnstile re-verification on retry (token may have expired)
+      setTurnstileToken(null)
+      setTurnstileReady(!isTurnstileEnabled())
+      setTurnstileKey((k) => k + 1)
     } finally {
+      clearSafetyTimer()
       useDesignStore.getState().setSaving(false)
     }
   }
 
   const handleSaveChanges = async () => {
     if (!isSupabaseConfigured()) return
+    clearSafetyTimer()
+
+    safetyTimerRef.current = setTimeout(() => {
+      useDesignStore.getState().setSaving(false)
+      setError('Save timed out. Please try again.')
+    }, SAFETY_TIMEOUT_MS)
 
     try {
       setError(null)
@@ -108,12 +144,15 @@ export function ActionBar() {
         setEmailTo('')
         setEmailSent(false)
         setEmailError(null)
+        setSaveError(null)
+        setFailCount(0)
         setShareUrl(buildShareUrl(id, name))
         setShareDialogOpen(true)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save')
     } finally {
+      clearSafetyTimer()
       useDesignStore.getState().setSaving(false)
     }
   }
@@ -126,6 +165,13 @@ export function ActionBar() {
     }
   }
 
+  const handleBackupDownload = async () => {
+    try {
+      await exportDesignAsPdf()
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to export PDF')
+    }
+  }
 
   const copyShareUrl = async () => {
     await navigator.clipboard.writeText(shareUrl)
@@ -193,7 +239,10 @@ export function ActionBar() {
         )}
       </div>
 
-      <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
+      <Dialog open={shareDialogOpen} onOpenChange={(open) => {
+        setShareDialogOpen(open)
+        if (!open) clearSafetyTimer()
+      }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Share Design</DialogTitle>
@@ -219,6 +268,7 @@ export function ActionBar() {
                 />
               </div>
               <TurnstileWidget
+                key={turnstileKey}
                 onToken={(token) => { setTurnstileToken(token); setTurnstileReady(true) }}
                 onError={() => { setTurnstileToken(null); setTurnstileReady(true) }}
               />
@@ -228,8 +278,46 @@ export function ActionBar() {
                 className="w-full h-8"
                 size="sm"
               >
-                {isSaving ? 'Saving...' : 'Save Design'}
+                {isSaving ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin mr-1.5" />
+                    Saving...
+                  </>
+                ) : saveError ? (
+                  <>
+                    <RefreshCw className="size-3.5 mr-1.5" />
+                    Try Again
+                  </>
+                ) : (
+                  'Save Design'
+                )}
               </Button>
+
+              {/* Inline error with retry context */}
+              {saveError && (
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+                  <div className="flex items-start gap-2 text-destructive text-xs">
+                    <AlertCircle className="size-3.5 mt-0.5 shrink-0" />
+                    <span>{saveError}</span>
+                  </div>
+                  {failCount >= 2 && (
+                    <div className="border-t border-destructive/20 pt-2">
+                      <p className="text-xs text-muted-foreground mb-1.5">
+                        Having trouble? Download your design so you don't lose your work.
+                      </p>
+                      <Button
+                        onClick={handleBackupDownload}
+                        variant="outline"
+                        size="sm"
+                        className="w-full h-7 text-xs gap-1.5"
+                      >
+                        <FileDown className="size-3" />
+                        Download Design as PDF
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-4">

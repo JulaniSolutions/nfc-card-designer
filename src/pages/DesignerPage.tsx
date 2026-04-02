@@ -1,10 +1,12 @@
+import { useEffect, useState } from 'react'
 import { DesignCanvas } from '@/components/canvas/DesignCanvas'
 import { DesignToolbar } from '@/components/toolbar/DesignToolbar'
 import { MaterialSelector } from '@/components/material/MaterialSelector'
 import { ActionBar } from '@/components/toolbar/ActionBar'
 import { RecentDesigns } from '@/components/recent/RecentDesigns'
 import { useDesignStore } from '@/store/design-store'
-import { CreditCard, Plus, Loader2 } from 'lucide-react'
+import { startAutoSave, loadDraft, restoreDraft, clearDraft } from '@/lib/auto-save'
+import { CreditCard, Plus, Loader2, RotateCcw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 export function DesignerPage() {
@@ -12,6 +14,49 @@ export function DesignerPage() {
   const designId = useDesignStore((s) => s.designId)
   const isSaving = useDesignStore((s) => s.isSaving)
   const resetDesign = useDesignStore((s) => s.resetDesign)
+  const [draftAvailable, setDraftAvailable] = useState(false)
+
+  // Start auto-save on mount
+  useEffect(() => {
+    const cleanup = startAutoSave()
+    return cleanup
+  }, [])
+
+  // Check for a restorable draft on mount (only on fresh load, not shared design URLs)
+  useEffect(() => {
+    const isSharedDesign = /^\/design\//.test(window.location.pathname)
+    if (isSharedDesign) return
+    const draft = loadDraft()
+    if (draft) setDraftAvailable(true)
+  }, [])
+
+  // beforeunload warning for unsaved work
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      const state = useDesignStore.getState()
+      // Warn if there's canvas content that hasn't been saved to server
+      const hasWork = state.frontCanvasJson || state.backCanvasJson
+      const isUnsaved = !state.designId || state.hasUnsavedChanges
+      if (hasWork && isUnsaved) {
+        e.preventDefault()
+      }
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [])
+
+  const handleRestoreDraft = () => {
+    const draft = loadDraft()
+    if (draft) {
+      restoreDraft(draft)
+      setDraftAvailable(false)
+    }
+  }
+
+  const handleDismissDraft = () => {
+    clearDraft()
+    setDraftAvailable(false)
+  }
 
   const handleNew = () => {
     // Briefly null out the variation to force effects to re-fire after reset
@@ -41,6 +86,22 @@ export function DesignerPage() {
           </div>
         </div>
       )}
+      {/* Draft restoration toast */}
+      {draftAvailable && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="bg-card border border-border rounded-lg shadow-lg px-4 py-3 flex items-center gap-3">
+            <p className="text-sm text-foreground">Restore your previous design?</p>
+            <Button onClick={handleRestoreDraft} size="sm" variant="default" className="gap-1.5 h-7">
+              <RotateCcw className="size-3" />
+              Restore
+            </Button>
+            <button onClick={handleDismissDraft} className="text-muted-foreground hover:text-foreground">
+              <X className="size-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="border-b border-border bg-card shrink-0 sticky top-0 z-40 lg:relative">
         <div className="h-14 flex items-center justify-between px-5">

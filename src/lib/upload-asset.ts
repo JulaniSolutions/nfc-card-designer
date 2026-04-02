@@ -1,4 +1,5 @@
 import { isSupabaseConfigured } from './supabase'
+import { fetchWithTimeout } from './fetch-with-timeout'
 
 function getEdgeFunctionUrl(name: string): string {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
@@ -18,13 +19,13 @@ export async function uploadOriginalAsset(file: File): Promise<UploadedAsset | n
     const formData = new FormData()
     formData.append('file', file)
 
-    const res = await fetch(getEdgeFunctionUrl('upload-asset'), {
+    const res = await fetchWithTimeout(getEdgeFunctionUrl('upload-asset'), {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
       },
       body: formData,
-    })
+    }, 45_000)
 
     if (!res.ok) return null
 

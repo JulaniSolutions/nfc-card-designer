@@ -2,9 +2,11 @@ import { isSupabaseConfigured, supabase } from './supabase'
 import { useDesignStore } from '@/store/design-store'
 import { addDesignToHistory } from './design-history'
 import { uploadOriginalAsset } from './upload-asset'
+import { fetchWithTimeout } from './fetch-with-timeout'
+import { clearDraft } from './auto-save'
 import { FabricImage } from 'fabric'
 
-const CUSTOM_PROPS = [
+export const CUSTOM_PROPS = [
   '_waveIcon', '_isLocked', '_layerLabel', '_isPlaceholder',
   '_qrPlaceholderBorder', '_qrPlaceholderLabel', '_backNameText',
   '_variableId',
@@ -37,7 +39,22 @@ function getEdgeFunctionUrl(name: string): string {
   return `${supabaseUrl}/functions/v1/${name}`
 }
 
+function generateShortId(): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+  const randomBytes = new Uint8Array(8)
+  crypto.getRandomValues(randomBytes)
+  let id = ''
+  for (let i = 0; i < 8; i++) {
+    id += chars[randomBytes[i] % chars.length]
+  }
+  return id
+}
+
 export async function saveDesign(turnstileToken?: string | null): Promise<string | null> {
+  if (!navigator.onLine) {
+    throw new Error('You appear to be offline. Please check your internet connection and try again.')
+  }
+
   if (!isSupabaseConfigured()) {
     console.warn('Supabase not configured — design not saved')
     return null
@@ -64,7 +81,7 @@ export async function saveDesign(turnstileToken?: string | null): Promise<string
         if (!src) continue
         let blob: Blob | null = null
         try {
-          const res = await fetch(src)
+          const res = await fetchWithTimeout(src, undefined, 10_000)
           blob = await res.blob()
         } catch {
           // If fetch fails (e.g. revoked blob URL), fall back to canvas with timeout
@@ -109,8 +126,11 @@ export async function saveDesign(turnstileToken?: string | null): Promise<string
   const state = useDesignStore.getState()
   const { materialId, variationId, frontCanvasJson, backCanvasJson, frontBgColor, backBgColor, designId, designName, designMethod, backOption, cardNames, variableFields, cardData, quantity } = state
 
+  // Generate a stable ID before the first attempt so retries don't create duplicates
+  const effectiveId = designId || generateShortId()
+
   const payload = {
-    design_id: designId || undefined,
+    design_id: effectiveId,
     name: designName || null,
     material_id: materialId,
     variation_id: variationId,
@@ -127,14 +147,37 @@ export async function saveDesign(turnstileToken?: string | null): Promise<string
     turnstile_token: turnstileToken,
   }
 
-  const res = await fetch(getEdgeFunctionUrl('save-design'), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-    },
-    body: JSON.stringify(payload),
-  })
+  const MAX_ATTEMPTS = 3
+  const BACKOFF_MS = [0, 1500, 3000]
+  let res: Response | undefined
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    if (attempt > 0) {
+      await new Promise((r) => setTimeout(r, BACKOFF_MS[attempt]))
+    }
+    try {
+      res = await fetchWithTimeout(getEdgeFunctionUrl('save-design'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify(payload),
+      }, 30_000)
+
+      // Don't retry 4xx — these are validation/auth errors that won't resolve on retry
+      if (res.ok || (res.status >= 400 && res.status < 500)) break
+      // 5xx — retry
+      if (attempt === MAX_ATTEMPTS - 1) break
+    } catch (err) {
+      // Network error or timeout — retry unless this was the last attempt
+      if (attempt === MAX_ATTEMPTS - 1) throw err
+    }
+  }
+
+  if (!res) {
+    throw new Error('Save failed after multiple attempts. Please try again.')
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Save failed' }))
@@ -142,14 +185,15 @@ export async function saveDesign(turnstileToken?: string | null): Promise<string
   }
 
   const data = await res.json()
-  const newId = data.design_id as string
+  const savedId = data.design_id as string
 
   if (!designId) {
-    state.setDesignId(newId)
+    state.setDesignId(savedId)
   }
   state.setLastSaved(new Date())
-  addDesignToHistory(newId)
-  return newId
+  addDesignToHistory(savedId)
+  clearDraft()
+  return savedId
 }
 
 export async function loadDesign(id: string): Promise<boolean> {
