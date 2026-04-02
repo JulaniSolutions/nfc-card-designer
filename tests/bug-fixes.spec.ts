@@ -109,6 +109,8 @@ test.describe('Fix 2: Draft restore updates the visible canvas', () => {
     // Navigate first so we can set localStorage
     await page.goto('/')
     await page.evaluate((draft) => {
+      // Clear any recent designs so the draft isn't skipped
+      localStorage.removeItem('nfc_recent_designs')
       localStorage.setItem('nfc_draft_design', JSON.stringify(draft))
     }, draftData)
 

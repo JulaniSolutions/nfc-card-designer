@@ -1,6 +1,7 @@
 import { Canvas } from 'fabric'
 import { useDesignStore } from '@/store/design-store'
 import { CUSTOM_PROPS } from './save-design'
+import { getDesignHistory } from './design-history'
 
 const DRAFT_KEY = 'nfc_draft_design'
 const DEBOUNCE_MS = 2000
@@ -93,7 +94,22 @@ export function clearDraft(): void {
   }
 }
 
-/** Load a draft from localStorage, if one exists. */
+/** Check if canvas JSON has user-added objects (not just placeholders/icons). */
+function hasUserObjects(json: string | null): boolean {
+  if (!json) return false
+  try {
+    const parsed = JSON.parse(json)
+    const objects = parsed?.objects as Record<string, unknown>[] | undefined
+    if (!objects || objects.length === 0) return false
+    return objects.some((obj) =>
+      !obj._isPlaceholder && !obj._isLocked && !obj._waveIcon
+    )
+  } catch {
+    return false
+  }
+}
+
+/** Load a draft from localStorage, if one exists and is worth restoring. */
 export function loadDraft(): DraftSnapshot | null {
   try {
     const raw = localStorage.getItem(DRAFT_KEY)
@@ -107,8 +123,22 @@ export function loadDraft(): DraftSnapshot | null {
         return null
       }
     }
-    // Only return if there's meaningful content
-    if (!draft.frontCanvasJson && !draft.backCanvasJson) return null
+    // Only show if the draft has real user content (not just placeholders)
+    if (!hasUserObjects(draft.frontCanvasJson) && !hasUserObjects(draft.backCanvasJson)) return null
+
+    // Skip if this design is already in Recent Designs (already saved to server)
+    const recent = getDesignHistory()
+    if (recent.length > 0) {
+      // Check if the draft's canvas state likely came from a saved design.
+      // If the user has recent designs and the draft has no unsaved work
+      // beyond what's already persisted, don't prompt.
+      const currentStoreId = useDesignStore.getState().designId
+      if (currentStoreId && recent.some((r) => r.designId === currentStoreId)) {
+        clearDraft()
+        return null
+      }
+    }
+
     return draft
   } catch {
     return null
@@ -145,25 +175,26 @@ export function restoreDraft(draft: DraftSnapshot): void {
   store.setBgColor('front', draft.frontBgColor)
   store.setBgColor('back', draft.backBgColor)
 
-  // Reload live Fabric canvas instances so the UI reflects the restored state
-  if (draft.frontCanvasJson && window.__fabricCanvasFront) {
-    loadCanvasFromJson(window.__fabricCanvasFront, draft.frontCanvasJson)
-  }
-  if (draft.backCanvasJson && window.__fabricCanvasBack) {
-    loadCanvasFromJson(window.__fabricCanvasBack, draft.backCanvasJson)
-  }
-
   // Card data
   if (draft.variableFields) {
-    // Set quantity first to size the cardData array
     store.setQuantity(draft.quantity || 1)
-    // Then overwrite with saved data
     useDesignStore.setState({
       variableFields: draft.variableFields,
       cardData: draft.cardData || [{ name: '' }],
       cardNames: draft.cardNames || [''],
     })
   }
+
+  // Defer canvas loading so material effects (wave icon, QR placeholder)
+  // settle first — avoids race condition where effects overwrite loaded objects
+  setTimeout(() => {
+    if (draft.frontCanvasJson && window.__fabricCanvasFront) {
+      loadCanvasFromJson(window.__fabricCanvasFront, draft.frontCanvasJson)
+    }
+    if (draft.backCanvasJson && window.__fabricCanvasBack) {
+      loadCanvasFromJson(window.__fabricCanvasBack, draft.backCanvasJson)
+    }
+  }, 500)
 }
 
 /** Start listening for store changes and auto-saving drafts. Returns an unsubscribe function. */
