@@ -3,6 +3,7 @@ import { Canvas, Textbox, IText, Rect, Group, FabricImage, type FabricObject } f
 import * as fabric from 'fabric'
 import { CARD_WIDTH, CARD_HEIGHT } from '@/config/canvas'
 import { useDesignStore } from '@/store/design-store'
+import { isEngravingMaterial, isBackEngraved } from '@/config/materials'
 
 const CUSTOM_PROPS = [
   '_waveIcon', '_isLocked', '_layerLabel', '_isPlaceholder',
@@ -247,7 +248,8 @@ export async function exportDesignAsPdf(): Promise<void> {
   }
 
   const { frontCanvasJson, backCanvasJson, frontBgColor, backBgColor, quantity, cardData, designMethod, materialId } = useDesignStore.getState()
-  const isMetalEngraved = designMethod === 'engraved' && materialId === 'metal'
+  const isEngravedMode = designMethod === 'engraved' && isEngravingMaterial(materialId)
+  const isBackEngravedMode = isEngravedMode && isBackEngraved(materialId)
 
   // === Proof front page ===
   const front = await prepareSide(frontCanvasJson, frontBgColor)
@@ -266,9 +268,9 @@ export async function exportDesignAsPdf(): Promise<void> {
     !(obj as FabricObject & { _variableId?: string })._variableId
   )
 
-  // For metal engraved: proof section is just 1 back page (card 1)
+  // For full metal engraved: proof section is just 1 back page (card 1)
   // For everything else: one back page per card (original behavior)
-  const proofBackCount = isMetalEngraved ? 1 : quantity
+  const proofBackCount = isBackEngravedMode ? 1 : quantity
 
   for (let i = 0; i < proofBackCount; i++) {
     pdf.addPage([CARD_WIDTH_MM, CARD_HEIGHT_MM], 'landscape')
@@ -288,8 +290,8 @@ export async function exportDesignAsPdf(): Promise<void> {
 
   cleanup(back.tempCanvas, back.tempCanvasEl)
 
-  // === Production pages for metal engraved designs ===
-  if (isMetalEngraved) {
+  // === Production pages for engraved designs ===
+  if (isEngravedMode) {
     // Production front page — white bg, black elements
     const prodFront = await prepareSide(frontCanvasJson, '#ffffff')
     pdf.addPage([CARD_WIDTH_MM, CARD_HEIGHT_MM], 'landscape')
@@ -298,34 +300,36 @@ export async function exportDesignAsPdf(): Promise<void> {
     renderObjectsToPdf(pdf, prodFront.objects, true)
     cleanup(prodFront.tempCanvas, prodFront.tempCanvasEl)
 
-    // Production back pages — one per card, white bg, black elements
-    const prodBack = await prepareSide(backCanvasJson, '#ffffff')
-    const prodVariableObjs = prodBack.objects.filter((obj) =>
-      (obj as FabricObject & { _variableId?: string })._variableId
-    )
-    const prodStaticObjs = prodBack.objects.filter((obj) =>
-      !(obj as FabricObject & { _variableId?: string })._variableId
-    )
+    // Production back pages — only for materials where back is also engraved (Full Metal)
+    if (isBackEngravedMode) {
+      const prodBack = await prepareSide(backCanvasJson, '#ffffff')
+      const prodVariableObjs = prodBack.objects.filter((obj) =>
+        (obj as FabricObject & { _variableId?: string })._variableId
+      )
+      const prodStaticObjs = prodBack.objects.filter((obj) =>
+        !(obj as FabricObject & { _variableId?: string })._variableId
+      )
 
-    for (let i = 0; i < quantity; i++) {
-      pdf.addPage([CARD_WIDTH_MM, CARD_HEIGHT_MM], 'landscape')
-      pdf.setFillColor(255, 255, 255)
-      pdf.rect(0, 0, CARD_WIDTH_MM, CARD_HEIGHT_MM, 'F')
+      for (let i = 0; i < quantity; i++) {
+        pdf.addPage([CARD_WIDTH_MM, CARD_HEIGHT_MM], 'landscape')
+        pdf.setFillColor(255, 255, 255)
+        pdf.rect(0, 0, CARD_WIDTH_MM, CARD_HEIGHT_MM, 'F')
 
-      renderObjectsToPdf(pdf, prodStaticObjs, true)
+        renderObjectsToPdf(pdf, prodStaticObjs, true)
 
-      const values = cardData[i] || {}
-      for (const obj of prodVariableObjs) {
-        const tagged = obj as Textbox & { _variableId?: string }
-        const value = values[tagged._variableId!] || ''
-        const originalText = tagged.text
-        tagged.set('text', value)
-        renderTextToPdf(pdf, tagged, tagged.left || 0, tagged.top || 0, tagged.opacity ?? 1, true)
-        tagged.set('text', originalText!)
+        const values = cardData[i] || {}
+        for (const obj of prodVariableObjs) {
+          const tagged = obj as Textbox & { _variableId?: string }
+          const value = values[tagged._variableId!] || ''
+          const originalText = tagged.text
+          tagged.set('text', value)
+          renderTextToPdf(pdf, tagged, tagged.left || 0, tagged.top || 0, tagged.opacity ?? 1, true)
+          tagged.set('text', originalText!)
+        }
       }
-    }
 
-    cleanup(prodBack.tempCanvas, prodBack.tempCanvasEl)
+      cleanup(prodBack.tempCanvas, prodBack.tempCanvasEl)
+    }
   }
 
   pdf.save('nfc-card-design.pdf')

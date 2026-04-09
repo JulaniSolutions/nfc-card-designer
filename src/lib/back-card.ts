@@ -1,6 +1,6 @@
 import { Canvas, Rect, Textbox, Group, type FabricObject } from 'fabric'
 import { CARD_WIDTH, CARD_HEIGHT } from '@/config/canvas'
-import { getVariation } from '@/config/materials'
+import { getVariation, isBackEngraved } from '@/config/materials'
 import { useDesignStore, type VariableField, type CardData } from '@/store/design-store'
 
 const QR_SIZE = 236 // ~20mm on CR80
@@ -41,7 +41,7 @@ function getDefaultPrintColor(): string {
 function getColor(): string {
   const { materialId } = useDesignStore.getState()
   // Back of metal is always engraved style, bamboo/plastic is printed
-  if (materialId === 'metal') return getEngravedColor()
+  if (isBackEngraved(materialId)) return getEngravedColor()
   return getDefaultPrintColor()
 }
 
@@ -56,7 +56,7 @@ function markVariable(obj: FabricObject, layerLabel: string, variableId: string)
 function getQrPosition(materialId: string | null, option: BackOption): { left: number; top: number; size: number } {
   const size = QR_SIZE
 
-  if (materialId === 'metal') {
+  if (isBackEngraved(materialId)) {
     if (option === 'qr-only') {
       // Centered within the left 2/3 (avoiding NFC chip on right)
       return { left: METAL_USABLE_WIDTH / 2, top: CARD_HEIGHT / 2, size }
@@ -216,7 +216,7 @@ export function updateQrPlaceholder(canvas: Canvas) {
 export function updateVariableTexts(canvas: Canvas, variableFields: VariableField[], cardData: CardData) {
   const { materialId, backOption } = useDesignStore.getState()
   const color = getColor()
-  const maxWidth = materialId === 'metal' ? METAL_USABLE_WIDTH - EDGE_PAD * 2 : CARD_WIDTH - EDGE_PAD * 2
+  const maxWidth = isBackEngraved(materialId) ? METAL_USABLE_WIDTH - EDGE_PAD * 2 : CARD_WIDTH - EDGE_PAD * 2
 
   // Safety: remove any stray variable objects from the OTHER canvas
   const otherCanvas = canvas === window.__fabricCanvasBack

@@ -11,6 +11,7 @@ import {
   getCurrentEngravedColor,
   getCurrentDefaultPrintColor,
 } from '@/lib/engraved-filters'
+import { isEngravingMaterial } from '@/config/materials'
 import { isImageOpaque } from '@/lib/transparency'
 
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/svg+xml', 'image/webp']
@@ -356,7 +357,7 @@ export function DesignToolbar() {
   return (
     <div className="space-y-4">
       {/* Design method toggle — metal only */}
-      {materialId === 'metal' && <DesignMethodToggle />}
+      {isEngravingMaterial(materialId) && <DesignMethodToggle />}
 
       {/* Add elements — hidden on mobile (shown near layers instead) */}
       <div className="hidden lg:block">

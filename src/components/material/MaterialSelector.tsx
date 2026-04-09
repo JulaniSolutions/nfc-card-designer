@@ -44,7 +44,7 @@ export function MaterialSelector() {
     // Pick first in-stock variation, or first overall
     const firstAvailable = material.variations.find((v) => v.inStock !== false) ?? material.variations[0]
     const newVariationId = firstAvailable.id
-    const newMethod = material.id === 'metal' ? 'engraved' : 'printed'
+    const newMethod = material.supportsEngraving ? 'engraved' : 'printed'
     const oldVarId = variationId
     setMaterial(material.id, newVariationId)
     setDesignMethod(newMethod)
@@ -55,7 +55,7 @@ export function MaterialSelector() {
     if (variation.inStock === false) return
     const oldVarId = variationId
     setMaterial(material.id, variation.id)
-    const currentMethod = material.id === 'metal' ? designMethod : 'printed'
+    const currentMethod = material.supportsEngraving ? designMethod : 'printed'
     applyFiltersForVariation(variation.id, currentMethod, oldVarId)
   }
 

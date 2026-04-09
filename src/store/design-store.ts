@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { isEngravingMaterial } from '@/config/materials'
 
 export type CardSide = 'front' | 'back'
 export type DesignMethod = 'engraved' | 'printed'
@@ -156,7 +157,7 @@ export const useDesignStore = create<DesignState>((set, get) => ({
   setMaterial: (materialId, variationId) => {
     // Auto-switch to printed for non-metal materials
     const updates: Partial<DesignState> = { materialId, variationId }
-    if (materialId !== 'metal') {
+    if (!isEngravingMaterial(materialId)) {
       updates.designMethod = 'printed'
     }
     if (get().designId) updates.hasUnsavedChanges = true

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Canvas, FabricObject, FabricImage, InteractiveFabricObject, Textbox, IText } from 'fabric'
 import { CARD_WIDTH, CARD_HEIGHT, CARD_CORNER_RADIUS } from '@/config/canvas'
 import { useDesignStore, type CardSide } from '@/store/design-store'
-import { getVariation } from '@/config/materials'
+import { getVariation, isEngravingMaterial, shouldHideWaveIcon } from '@/config/materials'
 import { cn } from '@/lib/utils'
 import { LayersPanel } from '@/components/layers/LayersPanel'
 import { MobileAddElements } from '@/components/toolbar/DesignToolbar'
@@ -275,7 +275,7 @@ function CardCanvas({ side }: { side: CardSide }) {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    if (materialId === 'metal') {
+    if (shouldHideWaveIcon(materialId)) {
       removeWaveIcon(canvas)
     } else {
       const variation = variationId ? getVariation(variationId) : undefined
@@ -368,7 +368,7 @@ function CardCanvas({ side }: { side: CardSide }) {
 
   // Get placeholder text color based on material
   const variation = variationId ? getVariation(variationId) : undefined
-  const placeholderColor = materialId === 'metal'
+  const placeholderColor = isEngravingMaterial(materialId)
     ? (variation?.engravedColor ?? '#C0C0C0')
     : (variation?.defaultPrintColor ?? '#000000')
 

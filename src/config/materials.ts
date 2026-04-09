@@ -20,6 +20,12 @@ export interface Material {
   name: string
   description: string
   variations: MaterialVariation[]
+  /** Whether the front supports an engraved/printed toggle */
+  supportsEngraving: boolean
+  /** Whether the back side always uses engraved color (e.g. Full Metal) */
+  backAlwaysEngraved: boolean
+  /** Whether to hide the NFC wave icon on the front */
+  hideWaveIcon: boolean
 }
 
 export const materials: Material[] = [
@@ -27,6 +33,9 @@ export const materials: Material[] = [
     id: 'plastic',
     name: 'Plastic',
     description: 'Lightweight and durable PVC cards',
+    supportsEngraving: false,
+    backAlwaysEngraved: false,
+    hideWaveIcon: false,
     variations: [
       {
         id: 'pvc-white',
@@ -56,6 +65,9 @@ export const materials: Material[] = [
     id: 'bamboo',
     name: 'Bamboo',
     description: 'Eco-friendly natural bamboo cards',
+    supportsEngraving: false,
+    backAlwaysEngraved: false,
+    hideWaveIcon: false,
     variations: [
       {
         id: 'bamboo-natural',
@@ -72,8 +84,11 @@ export const materials: Material[] = [
   },
   {
     id: 'metal',
-    name: 'Metal',
+    name: 'Full Metal',
     description: 'Premium solid metal cards',
+    supportsEngraving: true,
+    backAlwaysEngraved: true,
+    hideWaveIcon: true,
     variations: [
       {
         id: 'metal-black-steel',
@@ -110,6 +125,48 @@ export const materials: Material[] = [
       },
     ],
   },
+  {
+    id: 'hybrid-metal',
+    name: 'Hybrid Metal',
+    description: 'Metal-PVC hybrid cards',
+    supportsEngraving: true,
+    backAlwaysEngraved: false,
+    hideWaveIcon: true,
+    variations: [
+      {
+        id: 'hybrid-metal-black-steel',
+        name: 'Matte Black Steel',
+        description: 'Matte black steel hybrid',
+        colorHint: '#1a1a1a',
+        frontImage: '/materials/hybridmetal-black-front.webp',
+        backImage: '/materials/hybridmetal-black-back.webp',
+        engravedColor: '#C0C0C0',
+        defaultPrintColor: '#FFFFFF',
+        swatch: '/materials/swatch-hybridmetal-black-steel.webp',
+      },
+    ],
+  },
+  {
+    id: '24k-gold',
+    name: '24k Gold',
+    description: 'Premium 24k gold plated cards',
+    supportsEngraving: true,
+    backAlwaysEngraved: false,
+    hideWaveIcon: true,
+    variations: [
+      {
+        id: '24k-gold',
+        name: '24k Gold',
+        description: 'Stainless steel core with 24k gold plating',
+        colorHint: '#D4AF37',
+        frontImage: '/materials/24kgold-front.webp',
+        backImage: '/materials/24kgold-back.webp',
+        engravedColor: '#4E4743',
+        defaultPrintColor: '#000000',
+        swatch: '/materials/swatch-24kgold.png',
+      },
+    ],
+  },
 ]
 
 export function getMaterial(materialId: string): Material | undefined {
@@ -122,4 +179,22 @@ export function getVariation(variationId: string): MaterialVariation | undefined
     if (variation) return variation
   }
   return undefined
+}
+
+export function isEngravingMaterial(materialId: string | null): boolean {
+  if (!materialId) return false
+  const mat = getMaterial(materialId)
+  return mat?.supportsEngraving ?? false
+}
+
+export function isBackEngraved(materialId: string | null): boolean {
+  if (!materialId) return false
+  const mat = getMaterial(materialId)
+  return mat?.backAlwaysEngraved ?? false
+}
+
+export function shouldHideWaveIcon(materialId: string | null): boolean {
+  if (!materialId) return false
+  const mat = getMaterial(materialId)
+  return mat?.hideWaveIcon ?? false
 }
