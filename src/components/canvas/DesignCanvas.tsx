@@ -14,6 +14,20 @@ import { addWaveIcon, removeWaveIcon, updateWaveIconColor } from '@/lib/wave-ico
 import { pushState, undo, redo, isHistoryLocked } from '@/lib/canvas-history'
 import { attachGuides } from '@/lib/canvas-guides'
 
+// Lock text objects so they can only be resized via width (ml/mr) or rotated.
+// Removes mt/mb (vertical stretch) and all corners so users can't distort text.
+// Font size is changed via the layers panel, not by dragging.
+function lockTextControls(obj: FabricObject) {
+  if (!(obj instanceof Textbox || obj instanceof IText)) return
+  obj.set({ lockScalingX: true, lockScalingY: true })
+  obj.setControlsVisibility({
+    ml: true, mr: true,
+    mt: false, mb: false,
+    tl: false, tr: false, bl: false, br: false,
+    mtr: true,
+  })
+}
+
 // Custom properties to preserve through Fabric.js serialization
 const CUSTOM_PROPS = [
   '_waveIcon',
@@ -133,6 +147,17 @@ function CardCanvas({ side }: { side: CardSide }) {
     canvas.on('object:added', handler)
     canvas.on('object:removed', handler)
 
+    // Enforce text control locks on every path: new text, loaded text, pasted text
+    const enforceTextLocks = (e: { target?: FabricObject } | { selected?: FabricObject[] }) => {
+      const target = 'target' in e ? e.target : undefined
+      const selected = 'selected' in e ? e.selected : undefined
+      if (target) lockTextControls(target)
+      if (selected) selected.forEach(lockTextControls)
+    }
+    canvas.on('object:added', enforceTextLocks)
+    canvas.on('selection:created', enforceTextLocks)
+    canvas.on('selection:updated', enforceTextLocks)
+
     // Set this canvas as active when clicked
     canvas.on('mouse:down', () => {
       window.__fabricCanvas = canvas
@@ -180,12 +205,7 @@ function CardCanvas({ side }: { side: CardSide }) {
               })
               obj.initDimensions()
             }
-            obj.set({ lockScalingX: true, lockScalingY: true })
-            obj.setControlsVisibility({
-              ml: true, mr: true, mt: false, mb: false,
-              tl: false, tr: false, bl: false, br: false,
-              mtr: true,
-            })
+            lockTextControls(obj)
           }
         }
         canvas.renderAll()
@@ -197,6 +217,9 @@ function CardCanvas({ side }: { side: CardSide }) {
       canvas.off('object:modified', handler)
       canvas.off('object:added', handler)
       canvas.off('object:removed', handler)
+      canvas.off('object:added', enforceTextLocks)
+      canvas.off('selection:created', enforceTextLocks)
+      canvas.off('selection:updated', enforceTextLocks)
       canvas.dispose()
       canvasRef.current = null
       if (side === 'front') {
