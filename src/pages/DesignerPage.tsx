@@ -118,30 +118,26 @@ export function DesignerPage() {
                   <span className="text-sm text-muted-foreground">{designName}</span>
                 </>
               )}
-              {designId && (
-                <Button onClick={handleNew} variant="ghost" size="xs" className="gap-1 ml-1 text-muted-foreground">
-                  <Plus className="size-3" />
-                  New
-                </Button>
-              )}
+              <Button onClick={handleNew} variant="ghost" size="xs" className="gap-1 ml-1 text-muted-foreground">
+                <Plus className="size-3" />
+                New
+              </Button>
               <RecentDesigns />
             </div>
           </div>
           <ActionBar />
         </div>
         {/* Mobile sub-bar: design name, new, recent */}
-        {designId && (
-          <div className="flex items-center gap-2 px-5 pb-2.5 -mt-1 lg:hidden">
-            {designName && (
-              <span className="text-xs text-muted-foreground truncate">{designName}</span>
-            )}
-            <Button onClick={handleNew} variant="ghost" size="xs" className="gap-1 text-muted-foreground shrink-0">
-              <Plus className="size-3" />
-              New
-            </Button>
-            <RecentDesigns />
-          </div>
-        )}
+        <div className="flex items-center gap-2 px-5 pb-2.5 -mt-1 lg:hidden">
+          {designName && (
+            <span className="text-xs text-muted-foreground truncate">{designName}</span>
+          )}
+          <Button onClick={handleNew} variant="ghost" size="xs" className="gap-1 text-muted-foreground shrink-0">
+            <Plus className="size-3" />
+            New
+          </Button>
+          <RecentDesigns />
+        </div>
       </header>
 
       {/* Main content */}
