@@ -93,7 +93,7 @@ Deno.serve(async (req) => {
           taskUUID: crypto.randomUUID(),
           inputImage: imageDataUrl,
           model: 'runware:110@1',
-          outputFormat: 'PNG',
+          outputFormat: 'WEBP',
           outputType: 'dataURI',
         },
       ]),
