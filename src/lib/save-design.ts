@@ -50,6 +50,56 @@ function generateShortId(): string {
   return id
 }
 
+/**
+ * Compress a large image blob to WebP to fit within the upload size limit.
+ * Falls back to reducing dimensions if quality alone isn't enough.
+ */
+async function compressImageBlob(
+  imgEl: HTMLImageElement,
+  maxBytes: number,
+): Promise<Blob | null> {
+  const w = imgEl.naturalWidth || imgEl.width
+  const h = imgEl.naturalHeight || imgEl.height
+  if (w === 0 || h === 0) return null
+
+  const attempts: Array<{ scale: number; quality: number }> = [
+    { scale: 1, quality: 0.9 },
+    { scale: 1, quality: 0.7 },
+    { scale: 0.5, quality: 0.9 },
+  ]
+
+  for (const { scale, quality } of attempts) {
+    const offscreen = document.createElement('canvas')
+    offscreen.width = Math.round(w * scale)
+    offscreen.height = Math.round(h * scale)
+    const ctx = offscreen.getContext('2d')!
+    ctx.drawImage(imgEl, 0, 0, offscreen.width, offscreen.height)
+    const result = await new Promise<Blob | null>((resolve) => {
+      const timer = setTimeout(() => resolve(null), 5000)
+      offscreen.toBlob(
+        (b) => { clearTimeout(timer); resolve(b) },
+        'image/webp',
+        quality,
+      )
+    })
+    if (result && result.size <= maxBytes) return result
+  }
+  // Return last attempt even if still large — upload-asset limit is 10 MB
+  const offscreen = document.createElement('canvas')
+  offscreen.width = Math.round(w * 0.5)
+  offscreen.height = Math.round(h * 0.5)
+  const ctx = offscreen.getContext('2d')!
+  ctx.drawImage(imgEl, 0, 0, offscreen.width, offscreen.height)
+  return new Promise<Blob | null>((resolve) => {
+    const timer = setTimeout(() => resolve(null), 5000)
+    offscreen.toBlob(
+      (b) => { clearTimeout(timer); resolve(b) },
+      'image/webp',
+      0.7,
+    )
+  })
+}
+
 export async function saveDesign(turnstileToken?: string | null): Promise<string | null> {
   if (!navigator.onLine) {
     throw new Error('You appear to be offline. Please check your internet connection and try again.')
@@ -98,7 +148,15 @@ export async function saveDesign(turnstileToken?: string | null): Promise<string
           if (!blob) throw new Error('Failed to process image for upload. Please try again.')
         }
         if (blob) {
-          const file = new File([blob], tagged._assetName || 'image.png', { type: 'image/png' })
+          // Compress large images (e.g. BG removal output can be 5+ MB uncompressed PNG)
+          const MAX_UPLOAD_SIZE = 4 * 1024 * 1024 // 4MB threshold
+          if (blob.size > MAX_UPLOAD_SIZE) {
+            const compressedBlob = await compressImageBlob(el, MAX_UPLOAD_SIZE)
+            if (compressedBlob) blob = compressedBlob
+          }
+          const ext = blob.type === 'image/webp' ? '.webp' : '.png'
+          const baseName = (tagged._assetName || 'image.png').replace(/\.\w+$/, '')
+          const file = new File([blob], baseName + ext, { type: blob.type })
           const asset = await uploadOriginalAsset(file)
           if (asset) {
             tagged._assetUrl = asset.url
@@ -123,7 +181,19 @@ export async function saveDesign(turnstileToken?: string | null): Promise<string
     storeState.setCanvasJson(side, JSON.stringify(json))
   }
 
-  const state = useDesignStore.getState()
+  // Guard: fail early if canvas JSON is still too large (images failed to upload)
+  const refreshedState = useDesignStore.getState()
+  const MAX_PAYLOAD_BYTES = 4_500_000 // 4.5MB — leave room under Supabase's ~6MB infra limit
+  const frontLen = refreshedState.frontCanvasJson?.length ?? 0
+  const backLen = refreshedState.backCanvasJson?.length ?? 0
+  if (frontLen + backLen > MAX_PAYLOAD_BYTES) {
+    throw new Error(
+      'Design is too large to save — an image could not be uploaded. ' +
+      'Try using a smaller image or removing some elements.',
+    )
+  }
+
+  const state = refreshedState
   const { materialId, variationId, frontCanvasJson, backCanvasJson, frontBgColor, backBgColor, designId, designName, designMethod, backOption, cardNames, variableFields, cardData, quantity } = state
 
   // Generate a stable ID before the first attempt so retries don't create duplicates

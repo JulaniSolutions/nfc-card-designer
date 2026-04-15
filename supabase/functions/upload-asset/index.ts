@@ -19,7 +19,7 @@ const ipRequests = new Map<string, number[]>()
 const RATE_LIMIT_WINDOW_MS = 60_000 // 1 minute
 const RATE_LIMIT_MAX = 20 // max 20 uploads per minute per IP
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 const ALLOWED_MIME_TYPES = [
   'image/png',
   'image/jpeg',
