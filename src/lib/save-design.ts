@@ -51,53 +51,95 @@ function generateShortId(): string {
 }
 
 /**
- * Compress a large image blob to WebP to fit within the upload size limit.
- * Falls back to reducing dimensions if quality alone isn't enough.
+ * Load an image from a blob into a fresh HTMLImageElement.
+ * Avoids relying on Fabric.js internal element state.
+ */
+function loadImageFromBlob(blob: Blob): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob)
+    const img = new Image()
+    img.onload = () => { URL.revokeObjectURL(url); resolve(img) }
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Failed to load image for compression')) }
+    img.src = url
+  })
+}
+
+/**
+ * Export a canvas element to a blob, trying WebP first (smaller, supports alpha),
+ * falling back to PNG if WebP encoding isn't supported (e.g. older Safari).
+ */
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  quality: number,
+): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), 5000)
+    canvas.toBlob(
+      (b) => {
+        clearTimeout(timer)
+        // If browser doesn't support WebP, toBlob may return PNG instead.
+        // Detect this by checking the type — if it fell back, try PNG explicitly.
+        if (b && b.type === 'image/webp') {
+          resolve(b)
+        } else if (b) {
+          // Browser returned something (likely PNG fallback) — use it
+          resolve(b)
+        } else {
+          // toBlob returned null — try PNG
+          canvas.toBlob(
+            (pngBlob) => resolve(pngBlob),
+            'image/png',
+          )
+        }
+      },
+      'image/webp',
+      quality,
+    )
+  })
+}
+
+/**
+ * Compress a large image blob to fit within the upload size limit.
+ * Creates a fresh Image from the blob (avoids Fabric.js element issues),
+ * then re-encodes at reduced quality/dimensions.
  */
 async function compressImageBlob(
-  imgEl: HTMLImageElement,
+  blob: Blob,
   maxBytes: number,
 ): Promise<Blob | null> {
-  const w = imgEl.naturalWidth || imgEl.width
-  const h = imgEl.naturalHeight || imgEl.height
+  let img: HTMLImageElement
+  try {
+    img = await loadImageFromBlob(blob)
+  } catch {
+    return null
+  }
+
+  const w = img.naturalWidth || img.width
+  const h = img.naturalHeight || img.height
   if (w === 0 || h === 0) return null
 
   const attempts: Array<{ scale: number; quality: number }> = [
-    { scale: 1, quality: 0.9 },
-    { scale: 1, quality: 0.7 },
-    { scale: 0.5, quality: 0.9 },
+    { scale: 1, quality: 0.92 },
+    { scale: 1, quality: 0.8 },
+    { scale: 0.75, quality: 0.85 },
+    { scale: 0.5, quality: 0.85 },
   ]
 
+  let best: Blob | null = null
   for (const { scale, quality } of attempts) {
     const offscreen = document.createElement('canvas')
     offscreen.width = Math.round(w * scale)
     offscreen.height = Math.round(h * scale)
     const ctx = offscreen.getContext('2d')!
-    ctx.drawImage(imgEl, 0, 0, offscreen.width, offscreen.height)
-    const result = await new Promise<Blob | null>((resolve) => {
-      const timer = setTimeout(() => resolve(null), 5000)
-      offscreen.toBlob(
-        (b) => { clearTimeout(timer); resolve(b) },
-        'image/webp',
-        quality,
-      )
-    })
-    if (result && result.size <= maxBytes) return result
+    ctx.drawImage(img, 0, 0, offscreen.width, offscreen.height)
+    const result = await canvasToBlob(offscreen, quality)
+    if (result) {
+      best = result
+      if (result.size <= maxBytes) return result
+    }
   }
-  // Return last attempt even if still large — upload-asset limit is 10 MB
-  const offscreen = document.createElement('canvas')
-  offscreen.width = Math.round(w * 0.5)
-  offscreen.height = Math.round(h * 0.5)
-  const ctx = offscreen.getContext('2d')!
-  ctx.drawImage(imgEl, 0, 0, offscreen.width, offscreen.height)
-  return new Promise<Blob | null>((resolve) => {
-    const timer = setTimeout(() => resolve(null), 5000)
-    offscreen.toBlob(
-      (b) => { clearTimeout(timer); resolve(b) },
-      'image/webp',
-      0.7,
-    )
-  })
+  // Return best attempt even if over maxBytes — upload-asset limit is 10 MB
+  return best
 }
 
 export async function saveDesign(turnstileToken?: string | null): Promise<string | null> {
@@ -151,7 +193,7 @@ export async function saveDesign(turnstileToken?: string | null): Promise<string
           // Compress large images (e.g. BG removal output can be 5+ MB uncompressed PNG)
           const MAX_UPLOAD_SIZE = 4 * 1024 * 1024 // 4MB threshold
           if (blob.size > MAX_UPLOAD_SIZE) {
-            const compressedBlob = await compressImageBlob(el, MAX_UPLOAD_SIZE)
+            const compressedBlob = await compressImageBlob(blob, MAX_UPLOAD_SIZE)
             if (compressedBlob) blob = compressedBlob
           }
           const ext = blob.type === 'image/webp' ? '.webp' : '.png'
