@@ -6,6 +6,7 @@ import { renderCanvasToImage } from '@/lib/render-preview'
 import { Loader2, Pencil, FileDown, ImageDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { exportDesignAsPdf } from '@/lib/export-pdf'
+import JSZip from 'jszip'
 
 interface SourceFile {
   url: string
@@ -32,19 +33,33 @@ function extractSourceFiles(frontJson: string | null, backJson: string | null): 
   return files
 }
 
+function triggerBlobDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 async function downloadSourceFiles(files: SourceFile[]) {
-  for (const file of files) {
-    const a = document.createElement('a')
-    a.href = file.url
-    a.download = file.name
-    a.target = '_blank'
-    a.rel = 'noopener'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    // Small delay between downloads so browser doesn't block them
-    if (files.length > 1) await new Promise((r) => setTimeout(r, 300))
+  if (files.length === 1) {
+    const res = await fetch(files[0].url)
+    const blob = await res.blob()
+    triggerBlobDownload(blob, files[0].name)
+    return
   }
+
+  const zip = new JSZip()
+  await Promise.all(files.map(async (file) => {
+    const res = await fetch(file.url)
+    const blob = await res.blob()
+    zip.file(file.name, blob)
+  }))
+  const zipBlob = await zip.generateAsync({ type: 'blob' })
+  triggerBlobDownload(zipBlob, 'source-files.zip')
 }
 
 interface DesignPreviewProps {
@@ -70,6 +85,7 @@ export function DesignPreview({ onEdit }: DesignPreviewProps) {
   const [frontImage, setFrontImage] = useState<string | null>(null)
   const [backImage, setBackImage] = useState<string | null>(null)
   const [rendering, setRendering] = useState(true)
+  const [downloadingSource, setDownloadingSource] = useState(false)
 
   const material = materialId ? getMaterial(materialId) : null
   const variation = variationId ? getVariation(variationId) : null
@@ -207,10 +223,20 @@ export function DesignPreview({ onEdit }: DesignPreviewProps) {
               size="lg"
               variant="outline"
               className="gap-2"
-              onClick={() => downloadSourceFiles(sourceFiles)}
+              disabled={downloadingSource}
+              onClick={async () => {
+                setDownloadingSource(true)
+                try {
+                  await downloadSourceFiles(sourceFiles)
+                } catch {
+                  alert('Failed to download source files')
+                } finally {
+                  setDownloadingSource(false)
+                }
+              }}
             >
-              <ImageDown className="size-4" />
-              Download Source Files
+              {downloadingSource ? <Loader2 className="size-4 animate-spin" /> : <ImageDown className="size-4" />}
+              {downloadingSource ? 'Downloading...' : 'Download Source Files'}
             </Button>
           )}
           <Button size="lg" variant="outline" onClick={onEdit} className="gap-2">
