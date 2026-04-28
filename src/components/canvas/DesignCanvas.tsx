@@ -45,6 +45,7 @@ const CUSTOM_PROPS = [
   '_layerType',
   '_assetUrl',
   '_assetName',
+  '_originalAssetUrl',
   '_undeletable',
 ]
 

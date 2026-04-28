@@ -102,8 +102,17 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
+    const allowedPrefixes = ['uploads', 'originals']
+    const prefix = formData.get('prefix')?.toString() || 'uploads'
+    if (!allowedPrefixes.includes(prefix)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid upload prefix.' }),
+        { headers: { ...cors, 'Content-Type': 'application/json' }, status: 400 }
+      )
+    }
+
     const fileName = `${crypto.randomUUID()}.${fileExt}`
-    const filePath = `uploads/${fileName}`
+    const filePath = `${prefix}/${fileName}`
 
     const { error } = await supabase.storage
       .from('design-assets')

@@ -13,6 +13,7 @@ import {
 } from '@/lib/engraved-filters'
 import { isEngravingMaterial } from '@/config/materials'
 import { isImageOpaque } from '@/lib/transparency'
+import { uploadOriginalSourceFile } from '@/lib/upload-asset'
 
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/svg+xml', 'image/webp']
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
@@ -132,7 +133,7 @@ function addImageToCanvas(
 
       // Tag the image with an ID for tracking
       const imgId = crypto.randomUUID()
-      const tagged = fabricImg as FabricImage & { _designId?: string; _isOpaque?: boolean; _addedInEngraved?: boolean; _assetUrl?: string; _assetName?: string }
+      const tagged = fabricImg as FabricImage & { _designId?: string; _isOpaque?: boolean; _addedInEngraved?: boolean; _assetUrl?: string; _assetName?: string; _originalAssetUrl?: string }
       tagged._designId = imgId
       tagged._addedInEngraved = isEngraved
 
@@ -147,6 +148,11 @@ function addImageToCanvas(
       canvas.add(fabricImg)
       canvas.setActiveObject(fabricImg)
       canvas.renderAll()
+
+      // Upload untouched original source file for designer access (fire-and-forget)
+      uploadOriginalSourceFile(file).then((asset) => {
+        if (asset) tagged._originalAssetUrl = asset.url
+      })
 
       // Async transparency check — only warn if added in engraved mode
       if (isEngraved) {

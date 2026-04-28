@@ -3,9 +3,49 @@ import { useDesignStore } from '@/store/design-store'
 import { getMaterial, getVariation } from '@/config/materials'
 import { CARD_CORNER_RADIUS } from '@/config/canvas'
 import { renderCanvasToImage } from '@/lib/render-preview'
-import { Loader2, Pencil, FileDown } from 'lucide-react'
+import { Loader2, Pencil, FileDown, ImageDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { exportDesignAsPdf } from '@/lib/export-pdf'
+
+interface SourceFile {
+  url: string
+  name: string
+}
+
+function extractSourceFiles(frontJson: string | null, backJson: string | null): SourceFile[] {
+  const files: SourceFile[] = []
+  const seen = new Set<string>()
+
+  for (const json of [frontJson, backJson]) {
+    if (!json) continue
+    try {
+      const parsed = JSON.parse(json)
+      for (const obj of parsed.objects ?? []) {
+        if (!obj._designId) continue
+        const url = obj._originalAssetUrl || obj._assetUrl
+        if (!url || seen.has(url)) continue
+        seen.add(url)
+        files.push({ url, name: obj._assetName || 'image' })
+      }
+    } catch { /* skip malformed JSON */ }
+  }
+  return files
+}
+
+async function downloadSourceFiles(files: SourceFile[]) {
+  for (const file of files) {
+    const a = document.createElement('a')
+    a.href = file.url
+    a.download = file.name
+    a.target = '_blank'
+    a.rel = 'noopener'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    // Small delay between downloads so browser doesn't block them
+    if (files.length > 1) await new Promise((r) => setTimeout(r, 300))
+  }
+}
 
 interface DesignPreviewProps {
   onEdit: () => void
@@ -33,6 +73,7 @@ export function DesignPreview({ onEdit }: DesignPreviewProps) {
 
   const material = materialId ? getMaterial(materialId) : null
   const variation = variationId ? getVariation(variationId) : null
+  const sourceFiles = extractSourceFiles(frontCanvasJson, backCanvasJson)
 
   useEffect(() => {
     let cancelled = false
@@ -161,6 +202,17 @@ export function DesignPreview({ onEdit }: DesignPreviewProps) {
             <FileDown className="size-4" />
             Download PDF
           </Button>
+          {sourceFiles.length > 0 && (
+            <Button
+              size="lg"
+              variant="outline"
+              className="gap-2"
+              onClick={() => downloadSourceFiles(sourceFiles)}
+            >
+              <ImageDown className="size-4" />
+              Download Source Files
+            </Button>
+          )}
           <Button size="lg" variant="outline" onClick={onEdit} className="gap-2">
             <Pencil className="size-4" />
             Edit Design

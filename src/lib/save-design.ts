@@ -11,7 +11,7 @@ export const CUSTOM_PROPS = [
   '_qrPlaceholderBorder', '_qrPlaceholderLabel', '_backNameText',
   '_variableId',
   '_designId', '_isOpaque', '_addedInEngraved', '_originalSrc', '_layerType',
-  '_assetUrl', '_assetName', '_undeletable',
+  '_assetUrl', '_assetName', '_originalAssetUrl', '_undeletable',
 ]
 
 export interface SavedDesign {
