@@ -35,3 +35,6 @@ dist-ssr
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# Claude Code local machine settings (may contain tokens)
+.claude/settings.local.json
