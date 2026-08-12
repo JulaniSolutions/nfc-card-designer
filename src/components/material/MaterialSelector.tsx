@@ -1,4 +1,10 @@
-import { materials, getVariation, type Material, type MaterialVariation } from '@/config/materials'
+import {
+  materials,
+  getVariation,
+  isSideEngraved,
+  type Material,
+  type MaterialVariation,
+} from '@/config/materials'
 import { useDesignStore } from '@/store/design-store'
 import { cn } from '@/lib/utils'
 import { Check } from 'lucide-react'
@@ -9,8 +15,8 @@ import {
 } from '@/lib/engraved-filters'
 
 function applyFiltersForVariation(
+  materialId: string,
   newVariationId: string,
-  method: 'engraved' | 'printed',
   oldVariationId?: string | null,
 ) {
   const variation = getVariation(newVariationId)
@@ -18,9 +24,17 @@ function applyFiltersForVariation(
 
   const oldVariation = oldVariationId ? getVariation(oldVariationId) : null
 
-  for (const canvas of [window.__fabricCanvasFront, window.__fabricCanvasBack]) {
+  // Decided per side. Hybrid Metal and 24k Gold engrave the front but print the
+  // back, so engraving both canvases would overwrite the back's print colours —
+  // and disagree with the PDF, which keys its back pages off isBackEngraved.
+  const sides = [
+    ['front', window.__fabricCanvasFront],
+    ['back', window.__fabricCanvasBack],
+  ] as const
+
+  for (const [side, canvas] of sides) {
     if (!canvas) continue
-    if (method === 'engraved') {
+    if (isSideEngraved(materialId, side)) {
       applyEngravedToCanvas(canvas, variation.engravedColor)
     } else if (oldVariation) {
       // Smart reset: update text whose color matches the old material's default or engraved color
@@ -37,26 +51,24 @@ function applyFiltersForVariation(
 }
 
 export function MaterialSelector() {
-  const { materialId, variationId, setMaterial, setDesignMethod, designMethod } = useDesignStore()
+  const { materialId, variationId, setMaterial } = useDesignStore()
   const selectedMaterial = materials.find((m) => m.id === materialId)
 
   const handleMaterialClick = (material: Material) => {
     // Pick first in-stock variation, or first overall
     const firstAvailable = material.variations.find((v) => v.inStock !== false) ?? material.variations[0]
     const newVariationId = firstAvailable.id
-    const newMethod = material.supportsEngraving ? 'engraved' : 'printed'
     const oldVarId = variationId
+    // setMaterial already derives the method from the material.
     setMaterial(material.id, newVariationId)
-    setDesignMethod(newMethod)
-    applyFiltersForVariation(newVariationId, newMethod, oldVarId)
+    applyFiltersForVariation(material.id, newVariationId, oldVarId)
   }
 
   const handleVariationClick = (material: Material, variation: MaterialVariation) => {
     if (variation.inStock === false) return
     const oldVarId = variationId
     setMaterial(material.id, variation.id)
-    const currentMethod = material.supportsEngraving ? designMethod : 'printed'
-    applyFiltersForVariation(variation.id, currentMethod, oldVarId)
+    applyFiltersForVariation(material.id, variation.id, oldVarId)
   }
 
   return (

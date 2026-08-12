@@ -3,7 +3,7 @@ import { Canvas, Textbox, IText, Rect, Group, FabricImage, type FabricObject } f
 import * as fabric from 'fabric'
 import { CARD_WIDTH, CARD_HEIGHT } from '@/config/canvas'
 import { useDesignStore, type DesignMethod } from '@/store/design-store'
-import { isEngravingMaterial, isBackEngraved } from '@/config/materials'
+import { isFrontEngraved, isBackEngraved } from '@/config/materials'
 
 const CUSTOM_PROPS = [
   '_waveIcon', '_isLocked', '_layerLabel', '_isPlaceholder',
@@ -269,7 +269,10 @@ export async function exportDesignAsPdf(snapshot?: PdfExportSnapshot): Promise<v
 
   const { frontCanvasJson, backCanvasJson, frontBgColor, backBgColor, quantity, cardData, designMethod, materialId } =
     snapshot ?? useDesignStore.getState()
-  const isEngravedMode = designMethod === 'engraved' && isEngravingMaterial(materialId)
+  // Still gated on the stored method, not just the material: a design saved as
+  // printed metal before that option was withdrawn exports as it was ordered,
+  // with no laser production pages.
+  const isEngravedMode = designMethod === 'engraved' && isFrontEngraved(materialId)
   const isBackEngravedMode = isEngravedMode && isBackEngraved(materialId)
 
   // === Proof front page ===

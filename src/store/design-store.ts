@@ -1,9 +1,12 @@
 import { create } from 'zustand'
-import { isEngravingMaterial } from '@/config/materials'
+import { getDefaultDesignMethod, isFrontEngraved, type DesignMethod } from '@/config/materials'
 
 export type CardSide = 'front' | 'back'
-export type DesignMethod = 'engraved' | 'printed'
 export type BackOption = 'qr-only' | 'qr-name'
+
+// Re-exported so the many existing `from '@/store/design-store'` imports keep
+// working; the type itself lives in the material config it is derived from.
+export type { DesignMethod }
 
 export interface VariableField {
   id: string
@@ -19,8 +22,20 @@ export interface DesignState {
   materialId: string | null
   variationId: string | null
 
-  // Design method (engraved vs printed — only relevant for metal)
+  // Design method — derived from the material, not chosen. Only a design saved
+  // before printed metal was withdrawn can hold 'printed' on a metal material.
   designMethod: DesignMethod
+
+  /**
+   * The design was loaded as printed metal, so its artwork still needs converting
+   * to engraved once the canvases have finished loading.
+   *
+   * Held in the store rather than captured in the canvas component because
+   * `designMethod` is clamped to 'engraved' the moment the editor mounts, and
+   * under StrictMode the canvas remounts *after* that — so anything inferred from
+   * the flag at mount time reads as "nothing to do" on the canvas that survives.
+   */
+  legacyPrintedMetal: boolean
 
   // Stored text colors from printed mode (restored when switching back from engraved)
   savedPrintColors: Map<string, string>
@@ -47,7 +62,7 @@ export interface DesignState {
   quantity: number
 
   // Transparency warning
-  opaqueImageWarning: 'detected' | 'bg_removed' | 'printed' | 'dismissed' | null
+  opaqueImageWarning: 'detected' | 'bg_removed' | 'dismissed' | null
   opaqueImageId: string | null
 
   // Save state
@@ -61,7 +76,7 @@ export interface DesignState {
 
   // Actions
   resetDesign: () => void
-  setOpaqueWarning: (state: 'detected' | 'bg_removed' | 'printed' | 'dismissed' | null, imageId?: string | null) => void
+  setOpaqueWarning: (state: 'detected' | 'bg_removed' | 'dismissed' | null, imageId?: string | null) => void
   setDesignName: (name: string) => void
   setMaterial: (materialId: string, variationId: string) => void
   setDesignMethod: (method: DesignMethod) => void
@@ -122,6 +137,7 @@ export const useDesignStore = create<DesignState>((set, get) => ({
   materialId: 'plastic',
   variationId: 'pvc-white',
   designMethod: 'printed' as DesignMethod,
+  legacyPrintedMetal: false,
   savedPrintColors: new Map<string, string>(),
   activeSide: 'front',
   frontCanvasJson: null,
@@ -146,6 +162,7 @@ export const useDesignStore = create<DesignState>((set, get) => ({
     materialId: 'plastic',
     variationId: 'pvc-white',
     designMethod: 'printed' as DesignMethod,
+    legacyPrintedMetal: false,
     savedPrintColors: new Map<string, string>(),
     activeSide: 'front',
     frontCanvasJson: null,
@@ -175,17 +192,26 @@ export const useDesignStore = create<DesignState>((set, get) => ({
   setDesignName: (name) => set({ designName: name }),
 
   setMaterial: (materialId, variationId) => {
-    // Auto-switch to printed for non-metal materials
-    const updates: Partial<DesignState> = { materialId, variationId }
-    if (!isEngravingMaterial(materialId)) {
-      updates.designMethod = 'printed'
+    // The method follows the material in both directions: metal is engraved,
+    // everything else is printed.
+    const updates: Partial<DesignState> = {
+      materialId,
+      variationId,
+      designMethod: getDefaultDesignMethod(materialId),
     }
     if (get().designId) updates.hasUnsavedChanges = true
     set(updates)
   },
 
   setDesignMethod: (method) => {
-    const updates: Partial<DesignState> = { designMethod: method }
+    // Clamped to what the material allows. This is the one chokepoint for the
+    // method, so a stale caller (a restored draft, an old template) can never
+    // put the editor into printed-on-metal, which production can't fulfil.
+    const allowed = getDefaultDesignMethod(get().materialId)
+    const updates: Partial<DesignState> = { designMethod: allowed }
+    if (method !== allowed) {
+      console.warn(`Design method "${method}" is not available on this material; using "${allowed}".`)
+    }
     if (get().designId) updates.hasUnsavedChanges = true
     set(updates)
   },
@@ -324,7 +350,13 @@ export const useDesignStore = create<DesignState>((set, get) => ({
     set({
       materialId: data.materialId,
       variationId: data.variationId,
+      // Deliberately NOT clamped to the material's method, and deliberately not
+      // routed through setMaterial. Metal designs saved as printed before that
+      // option was withdrawn must still open and share exactly as they were
+      // saved; the editor converts them on entry (see lib/design-method.ts).
       designMethod: data.designMethod ?? 'printed',
+      legacyPrintedMetal:
+        (data.designMethod ?? 'printed') === 'printed' && isFrontEngraved(data.materialId),
       frontCanvasJson: data.frontCanvasJson,
       backCanvasJson: data.backCanvasJson,
       frontBgColor: data.frontBgColor,
@@ -353,7 +385,11 @@ export const useDesignStore = create<DesignState>((set, get) => ({
     set({
       materialId: data.materialId,
       variationId: data.variationId,
+      // Same as loadDesign: kept verbatim so the editor can spot a template
+      // published as printed metal and convert its artwork, not just its flag.
       designMethod: data.designMethod ?? 'printed',
+      legacyPrintedMetal:
+        (data.designMethod ?? 'printed') === 'printed' && isFrontEngraved(data.materialId),
       savedPrintColors: new Map<string, string>(),
       activeSide: 'front',
       frontCanvasJson: data.frontCanvasJson,

@@ -29,6 +29,22 @@ const MAX_DESCRIPTION_LENGTH = 300
 
 const UNIQUE_VIOLATION = '23505'
 
+// Mirrors `frontAlwaysEngraved` in src/config/materials.ts. Edge functions deploy
+// independently and can't import from src/, so keep the two in step by hand.
+const ENGRAVE_ONLY_MATERIALS = ['metal', 'hybrid-metal', '24k-gold']
+
+/**
+ * Metal can no longer be printed, so a newly published template must not claim
+ * to be. Templates published before the change keep their stored value; the
+ * editor converts them when someone forks one.
+ */
+function normalizeDesignMethod(materialId: unknown, designMethod: unknown): string {
+  if (typeof materialId === 'string' && ENGRAVE_ONLY_MATERIALS.includes(materialId)) {
+    return 'engraved'
+  }
+  return designMethod === 'engraved' || designMethod === 'printed' ? designMethod : 'printed'
+}
+
 function getClientIp(req: Request): string {
   return (
     req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
@@ -301,7 +317,7 @@ Deno.serve(async (req) => {
       back_canvas_json: sanitizeCanvasJson(back_canvas_json, variableFields),
       front_bg_color: front_bg_color || '#ffffff',
       back_bg_color: back_bg_color || '#ffffff',
-      design_method: design_method || 'printed',
+      design_method: normalizeDesignMethod(material_id, design_method),
       back_option: back_option || 'qr-only',
       variable_fields: variableFields,
       updated_at: new Date().toISOString(),

@@ -30,21 +30,20 @@ export function removeEngravedFiltersFromImage(img: FabricImage) {
  * Apply engraved mode to all objects on a canvas.
  * - Images get Grayscale + BlendColor tint
  * - Text gets forced to the engraved color
- * Saves original printed colors before overwriting.
+ *
+ * Colors are NOT recorded here. Only a color the user picked themselves is worth
+ * restoring later, and this runs over every text object including ones still on
+ * the material's default — saving those would restore, say, a black card's white
+ * default onto a white card, leaving the text invisible. `savePrintColor` is
+ * called from the color picker instead.
  */
 export function applyEngravedToCanvas(canvas: Canvas, engravedColor: string) {
-  const store = useDesignStore.getState()
   const objects = canvas.getObjects()
 
   for (const obj of objects) {
     if (obj instanceof FabricImage) {
       applyEngravedFiltersToImage(obj, engravedColor)
     } else if (obj instanceof Textbox || obj instanceof IText) {
-      // Save the current color before overwriting
-      const objId = getObjectId(obj)
-      if (objId && obj.fill && typeof obj.fill === 'string') {
-        store.savePrintColor(objId, obj.fill)
-      }
       obj.set('fill', engravedColor)
     }
   }
@@ -77,7 +76,7 @@ export function removeEngravedFromCanvas(canvas: Canvas, defaultPrintColor: stri
 /**
  * Get or assign a stable ID for a fabric object (used for color preservation).
  */
-function getObjectId(obj: FabricObject): string | null {
+export function getObjectId(obj: FabricObject): string | null {
   // Use fabric's built-in object ID or create one
   const custom = obj as FabricObject & { _designId?: string }
   if (!custom._designId) {
@@ -98,6 +97,7 @@ export function resetColorsForMaterialSwitch(
   oldEngravedColor: string,
   newDefaultPrintColor: string,
 ) {
+  const store = useDesignStore.getState()
   const objects = canvas.getObjects()
 
   for (const obj of objects) {
@@ -107,9 +107,15 @@ export function resetColorsForMaterialSwitch(
       const fill = typeof obj.fill === 'string' ? obj.fill?.toLowerCase() : null
       const isOldDefault = fill === oldDefaultPrintColor.toLowerCase()
       const isOldEngraved = fill === oldEngravedColor.toLowerCase()
-      if (isOldDefault || isOldEngraved) {
-        obj.set('fill', newDefaultPrintColor)
-      }
+      if (!isOldDefault && !isOldEngraved) continue
+
+      // Text sitting on the old engraved colour was overwritten when the design
+      // moved to an engraved material — the user's own colour is in the store.
+      // Without this, a trip through metal and back silently loses it, and with
+      // the engraved/printed toggle gone there is no other way to get it back.
+      const objId = (obj as FabricObject & { _designId?: string })._designId
+      const savedColor = isOldEngraved && objId ? store.getPrintColor(objId) : undefined
+      obj.set('fill', savedColor ?? newDefaultPrintColor)
     }
   }
 

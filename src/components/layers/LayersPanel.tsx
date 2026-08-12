@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { FabricImage, Textbox, IText, type FabricObject, type Canvas } from 'fabric'
 import { useDesignStore } from '@/store/design-store'
-import { getVariation } from '@/config/materials'
+import { getVariation, isSideEngraved } from '@/config/materials'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -38,6 +38,7 @@ import { removeBackground, isBackgroundRemovalEnabled } from '@/lib/runware'
 import {
   applyEngravedFiltersToImage,
   getCurrentEngravedColor,
+  getObjectId,
 } from '@/lib/engraved-filters'
 
 const ALL_WEIGHTS = [
@@ -109,8 +110,11 @@ function getLayers(canvas: Canvas | null): LayerInfo[] {
 
 export function LayersPanel() {
   const activeSide = useDesignStore((s) => s.activeSide)
-  const designMethod = useDesignStore((s) => s.designMethod)
+  const materialId = useDesignStore((s) => s.materialId)
   const variationId = useDesignStore((s) => s.variationId)
+  // The panel lists the active canvas, so the side it is showing decides whether
+  // colours are locked — the back of Hybrid Metal / 24k Gold is printed.
+  const isEngraved = isSideEngraved(materialId, activeSide)
   const variableFields = useDesignStore((s) => s.variableFields)
   // Subscribe to canvas JSON changes — these fire on every object:added/modified/removed
   const frontJson = useDesignStore((s) => s.frontCanvasJson)
@@ -371,7 +375,7 @@ export function LayersPanel() {
                       <TextLayerControls
                         object={layer.object as Textbox}
                         onUpdate={refreshLayers}
-                        designMethod={designMethod}
+                        isEngraved={isEngraved}
                         variationId={variationId}
                         hideTextInput={!!layer.variableId}
                       />
@@ -444,19 +448,19 @@ export function LayersPanel() {
 function TextLayerControls({
   object,
   onUpdate,
-  designMethod,
+  isEngraved,
   variationId,
   hideTextInput,
 }: {
   object: Textbox
   onUpdate: () => void
-  designMethod: string
+  /** Whether the side this text sits on is engraved — not the design method. */
+  isEngraved: boolean
   variationId: string | null
   hideTextInput?: boolean
 }) {
   const textValue = object.text || ''
   const fillColor = (typeof object.fill === 'string' ? object.fill : '#000000')
-  const isEngraved = designMethod === 'engraved'
   const variation = variationId ? getVariation(variationId) : undefined
 
   const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -468,6 +472,10 @@ function TextLayerControls({
 
   const handleColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     object.set('fill', e.target.value)
+    // Remembered so a trip through an engraved material and back restores the
+    // user's own colour rather than the new material's default.
+    const objId = getObjectId(object)
+    if (objId) useDesignStore.getState().savePrintColor(objId, e.target.value)
     const canvas = getActiveCanvas()
     canvas?.renderAll()
     onUpdate()
@@ -639,7 +647,9 @@ function ImageLayerControls({
   onUpdate: () => void
 }) {
   const [isRemoving, setIsRemoving] = useState(false)
-  const designMethod = useDesignStore((s) => s.designMethod)
+  const materialId = useDesignStore((s) => s.materialId)
+  const activeSide = useDesignStore((s) => s.activeSide)
+  const isEngraved = isSideEngraved(materialId, activeSide)
   const canCrop = !isCropping()
   const canUndoCrop = hasCropUndo(object)
   const bgRemovalEnabled = isBackgroundRemovalEnabled()
@@ -691,7 +701,7 @@ function ImageLayerControls({
         object.setElement(newImg)
         object.set({ width: newImg.width, height: newImg.height })
 
-        if (designMethod === 'engraved') {
+        if (isEngraved) {
           applyEngravedFiltersToImage(object, getCurrentEngravedColor())
         }
 
@@ -720,7 +730,7 @@ function ImageLayerControls({
       object.setElement(restored)
       object.set({ width: restored.width, height: restored.height })
 
-      if (designMethod === 'engraved') {
+      if (isEngraved) {
         applyEngravedFiltersToImage(object, getCurrentEngravedColor())
       }
 

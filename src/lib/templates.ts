@@ -1,6 +1,7 @@
 import { isSupabaseConfigured, supabase } from './supabase'
 import { useDesignStore, type DesignMethod, type BackOption, type VariableField } from '@/store/design-store'
-import { getMaterial, getVariation, isEngravingMaterial } from '@/config/materials'
+import { getMaterial, getVariation } from '@/config/materials'
+import { isLegacyPrintedMetal } from './design-method'
 import { fetchWithTimeout } from './fetch-with-timeout'
 import { CUSTOM_PROPS } from './save-design'
 import { addTemplateToHistory, removeTemplateFromHistory } from './template-history'
@@ -371,8 +372,15 @@ export function applyTemplateToStore(template: Template): ApplyTemplateResult {
     warning = `${variation.name} is currently out of stock — you can still design with it.`
   }
 
-  let designMethod = (template.design_method as DesignMethod) || 'printed'
-  if (!isEngravingMaterial(materialId)) designMethod = 'printed'
+  // Passed through as published. The editor clamps it to what the material allows
+  // on entry, and converts the artwork if the template predates engrave-only metal.
+  const designMethod = (template.design_method as DesignMethod) || 'printed'
+
+  if (isLegacyPrintedMetal(materialId, designMethod)) {
+    warning = warning
+      ? `${warning} It has also been converted to engraved, as printed metal is no longer available.`
+      : 'This template was made when metal could be printed, so it has been converted to engraved.'
+  }
 
   clearDraft()
 

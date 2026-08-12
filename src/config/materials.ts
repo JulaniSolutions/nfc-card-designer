@@ -1,3 +1,12 @@
+/**
+ * How the front of a card is decorated. Derived from the material — never chosen
+ * by the user. Metal materials are laser engraved; plastic and bamboo are printed.
+ *
+ * Defined here rather than in the design store so that `getDefaultDesignMethod`
+ * can reference it without the store/config import cycle.
+ */
+export type DesignMethod = 'engraved' | 'printed'
+
 export interface MaterialVariation {
   id: string
   name: string
@@ -20,8 +29,11 @@ export interface Material {
   name: string
   description: string
   variations: MaterialVariation[]
-  /** Whether the front supports an engraved/printed toggle */
-  supportsEngraving: boolean
+  /**
+   * Whether the front is always laser engraved. Printing is not offered on these
+   * materials — this is not a user-facing choice.
+   */
+  frontAlwaysEngraved: boolean
   /** Whether the back side always uses engraved color (e.g. Full Metal) */
   backAlwaysEngraved: boolean
   /** Whether to hide the NFC wave icon on the front */
@@ -33,7 +45,7 @@ export const materials: Material[] = [
     id: 'plastic',
     name: 'Plastic',
     description: 'Lightweight and durable PVC cards',
-    supportsEngraving: false,
+    frontAlwaysEngraved: false,
     backAlwaysEngraved: false,
     hideWaveIcon: false,
     variations: [
@@ -65,7 +77,7 @@ export const materials: Material[] = [
     id: 'bamboo',
     name: 'Bamboo',
     description: 'Eco-friendly natural bamboo cards',
-    supportsEngraving: false,
+    frontAlwaysEngraved: false,
     backAlwaysEngraved: false,
     hideWaveIcon: false,
     variations: [
@@ -86,7 +98,7 @@ export const materials: Material[] = [
     id: 'metal',
     name: 'Full Metal',
     description: 'Premium solid metal cards',
-    supportsEngraving: true,
+    frontAlwaysEngraved: true,
     backAlwaysEngraved: true,
     hideWaveIcon: true,
     variations: [
@@ -129,7 +141,7 @@ export const materials: Material[] = [
     id: 'hybrid-metal',
     name: 'Hybrid Metal',
     description: 'Metal-PVC hybrid cards',
-    supportsEngraving: true,
+    frontAlwaysEngraved: true,
     backAlwaysEngraved: false,
     hideWaveIcon: true,
     variations: [
@@ -150,7 +162,7 @@ export const materials: Material[] = [
     id: '24k-gold',
     name: '24k Gold',
     description: 'Premium 24k gold plated cards',
-    supportsEngraving: true,
+    frontAlwaysEngraved: true,
     backAlwaysEngraved: false,
     hideWaveIcon: true,
     variations: [
@@ -181,10 +193,32 @@ export function getVariation(variationId: string): MaterialVariation | undefined
   return undefined
 }
 
-export function isEngravingMaterial(materialId: string | null): boolean {
+/** Whether this material's front is laser engraved rather than printed. */
+export function isFrontEngraved(materialId: string | null): boolean {
   if (!materialId) return false
   const mat = getMaterial(materialId)
-  return mat?.supportsEngraving ?? false
+  return mat?.frontAlwaysEngraved ?? false
+}
+
+/**
+ * The only design method a material can be designed in. Printing on metal is no
+ * longer offered, so this is the single source of truth for new work — the
+ * stored `design_method` is only authoritative for designs saved before that
+ * change, which stay readable exactly as they were saved.
+ */
+export function getDefaultDesignMethod(materialId: string | null): DesignMethod {
+  return isFrontEngraved(materialId) ? 'engraved' : 'printed'
+}
+
+/**
+ * Whether a given side of the card is laser engraved.
+ *
+ * The two sides can disagree: Hybrid Metal and 24k Gold have an engraved metal
+ * front but a printed back, so anything that applies engraved styling has to ask
+ * per side rather than reading the design method, which describes the front.
+ */
+export function isSideEngraved(materialId: string | null, side: 'front' | 'back'): boolean {
+  return side === 'front' ? isFrontEngraved(materialId) : isBackEngraved(materialId)
 }
 
 export function isBackEngraved(materialId: string | null): boolean {

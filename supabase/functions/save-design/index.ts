@@ -23,6 +23,23 @@ const RATE_LIMIT_MAX_UNVERIFIED = 3 // stricter limit when CAPTCHA is unavailabl
 const MAX_CANVAS_JSON_BYTES = 2_000_000 // 2MB per canvas field
 const MAX_BODY_BYTES = 5_000_000 // 5MB total body
 
+// Mirrors `frontAlwaysEngraved` in src/config/materials.ts. Edge functions deploy
+// independently and can't import from src/, so keep the two in step by hand.
+const ENGRAVE_ONLY_MATERIALS = ['metal', 'hybrid-metal', '24k-gold']
+
+/**
+ * Metal can no longer be printed. New rows are normalised on write so a stale
+ * cached client or a direct API call can't record a combination production
+ * cannot fulfil. Rows saved before the change are left untouched — reads are
+ * not normalised, and there is no backfill.
+ */
+function normalizeDesignMethod(materialId: unknown, designMethod: unknown): string {
+  if (typeof materialId === 'string' && ENGRAVE_ONLY_MATERIALS.includes(materialId)) {
+    return 'engraved'
+  }
+  return designMethod === 'engraved' || designMethod === 'printed' ? designMethod : 'printed'
+}
+
 function getClientIp(req: Request): string {
   return (
     req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
@@ -184,7 +201,7 @@ Deno.serve(async (req) => {
       back_canvas_json: back_canvas_json || null,
       front_bg_color: front_bg_color || '#ffffff',
       back_bg_color: back_bg_color || '#ffffff',
-      design_method: design_method || 'printed',
+      design_method: normalizeDesignMethod(material_id, design_method),
       back_option: back_option || 'qr-only',
       card_names: card_names || [''],
       variable_fields: variable_fields || [],

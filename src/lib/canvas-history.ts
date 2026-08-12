@@ -66,6 +66,20 @@ export function pushState(canvas: Canvas, customProps: string[]) {
 }
 
 /**
+ * Discard all history for a canvas and seed it with the current state.
+ *
+ * For changes the user must not be able to undo past — the state before them is
+ * no longer a valid design, so leaving it on the stack would let undo walk back
+ * into it.
+ */
+export function resetHistory(canvas: Canvas, customProps: string[]) {
+  const h = getHistory(canvas)
+  h.undoStack.length = 0
+  h.redoStack.length = 0
+  h.undoStack.push(JSON.stringify(canvas.toObject(customProps)))
+}
+
+/**
  * Restore canvas state while preserving background and protected elements.
  * - Protected elements are never added or removed, only repositioned.
  * - User elements are fully replaced from the saved state.

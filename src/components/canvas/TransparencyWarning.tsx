@@ -1,19 +1,17 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useDesignStore } from '@/store/design-store'
-import { AlertTriangle, CheckCircle, Info } from 'lucide-react'
+import { AlertTriangle, CheckCircle } from 'lucide-react'
 import { removeBackground, isBackgroundRemovalEnabled } from '@/lib/runware'
 import { FabricImage } from 'fabric'
 import {
   applyEngravedFiltersToImage,
-  applyEngravedToCanvas,
-  removeEngravedFromCanvas,
   getCurrentEngravedColor,
 } from '@/lib/engraved-filters'
-import { getVariation } from '@/config/materials'
+import { isSideEngraved } from '@/config/materials'
 import { cn } from '@/lib/utils'
 
-export type WarningState = 'detected' | 'bg_removed' | 'printed' | 'dismissed'
+export type WarningState = 'detected' | 'bg_removed' | 'dismissed'
 
 interface TransparencyWarningProps {
   state: WarningState
@@ -26,32 +24,14 @@ export function TransparencyWarning({
   onStateChange,
   targetImage,
 }: TransparencyWarningProps) {
-  const { designMethod, setDesignMethod, variationId } = useDesignStore()
+  const { materialId, activeSide } = useDesignStore()
+  // Per side: an image on a printed back keeps its colour even on a metal card.
+  const isEngraved = isSideEngraved(materialId, activeSide)
   const [isRemoving, setIsRemoving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const bgRemovalEnabled = isBackgroundRemovalEnabled()
 
   if (state === 'dismissed' || !targetImage) return null
-
-  const handleSwitchToPrinted = () => {
-    setDesignMethod('printed')
-    const variation = variationId ? getVariation(variationId) : undefined
-    const defaultPrintColor = variation?.defaultPrintColor ?? '#FFFFFF'
-    for (const c of [window.__fabricCanvasFront, window.__fabricCanvasBack]) {
-      if (c) removeEngravedFromCanvas(c, defaultPrintColor)
-    }
-    onStateChange('printed')
-  }
-
-  const handleSwitchToEngraved = () => {
-    setDesignMethod('engraved')
-    const variation = variationId ? getVariation(variationId) : undefined
-    const engravedColor = variation?.engravedColor ?? '#C0C0C0'
-    for (const c of [window.__fabricCanvasFront, window.__fabricCanvasBack]) {
-      if (c) applyEngravedToCanvas(c, engravedColor)
-    }
-    onStateChange('detected')
-  }
 
   const handleRemoveBackground = async () => {
     if (!targetImage) return
@@ -90,7 +70,7 @@ export function TransparencyWarning({
         targetImage.set({ width: newImg.width, height: newImg.height })
 
         // Re-apply engraved filters on the clean BG-removed source
-        if (designMethod === 'engraved') {
+        if (isEngraved) {
           applyEngravedFiltersToImage(targetImage, getCurrentEngravedColor())
         }
 
@@ -127,7 +107,7 @@ export function TransparencyWarning({
       targetImage.setElement(restored)
       targetImage.set({ width: restored.width, height: restored.height })
 
-      if (designMethod === 'engraved') {
+      if (isEngraved) {
         applyEngravedFiltersToImage(targetImage, getCurrentEngravedColor())
       }
 
@@ -171,7 +151,7 @@ export function TransparencyWarning({
           }
 
           // Re-apply engraved filters if needed
-          if (designMethod === 'engraved') {
+          if (isEngraved) {
             applyEngravedFiltersToImage(targetImage, getCurrentEngravedColor())
           }
 
@@ -193,18 +173,14 @@ export function TransparencyWarning({
   const icon =
     state === 'bg_removed' ? (
       <CheckCircle className="size-4 text-green-500 shrink-0 mt-0.5" />
-    ) : state === 'printed' ? (
-      <Info className="size-4 text-blue-500 shrink-0 mt-0.5" />
     ) : (
       <AlertTriangle className="size-4 text-amber-500 shrink-0 mt-0.5" />
     )
 
   const message =
     state === 'bg_removed'
-      ? "Background removed. Here's your engraved design — you can also try a printed design to compare."
-      : state === 'printed'
-        ? "Here's your printed design. Switch to engraved to compare the look, or click 'Looks good!' when you're happy."
-        : "Your image doesn't have a transparent background, so it will engrave as a solid block. Try removing it or switch to a printed design."
+      ? "Background removed. Here's your engraved design."
+      : "Your image doesn't have a transparent background, so it will engrave as a solid block. Try removing the background, or replace it with a transparent PNG."
 
   return (
     <div
@@ -212,9 +188,7 @@ export function TransparencyWarning({
         'rounded-lg border p-3 mb-4 transition-all animate-in slide-in-from-top-2 duration-200',
         state === 'bg_removed'
           ? 'bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-900'
-          : state === 'printed'
-            ? 'bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-900'
-            : 'bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-900'
+          : 'bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-900'
       )}
     >
       <div className="flex gap-2">
@@ -229,14 +203,6 @@ export function TransparencyWarning({
           <div className="flex flex-wrap gap-1.5 mt-2.5">
             {state === 'detected' && (
               <>
-                <Button
-                  onClick={handleSwitchToPrinted}
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-[11px]"
-                >
-                  Switch to Printed
-                </Button>
                 {bgRemovalEnabled && (
                   <Button
                     onClick={handleRemoveBackground}
@@ -270,14 +236,6 @@ export function TransparencyWarning({
             {state === 'bg_removed' && (
               <>
                 <Button
-                  onClick={handleSwitchToPrinted}
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-[11px]"
-                >
-                  Switch to Printed
-                </Button>
-                <Button
                   onClick={handleUndoBgRemoval}
                   variant="outline"
                   size="sm"
@@ -293,38 +251,6 @@ export function TransparencyWarning({
                 >
                   Replace
                 </Button>
-                <Button
-                  onClick={() => onStateChange('dismissed')}
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 text-[11px]"
-                >
-                  Looks good!
-                </Button>
-              </>
-            )}
-
-            {state === 'printed' && (
-              <>
-                <Button
-                  onClick={handleSwitchToEngraved}
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-[11px]"
-                >
-                  Switch to Engraved
-                </Button>
-                {bgRemovalEnabled && (
-                  <Button
-                    onClick={handleRemoveBackground}
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-[11px]"
-                    disabled={isRemoving}
-                  >
-                    {isRemoving ? 'Removing…' : 'Remove Background'}
-                  </Button>
-                )}
                 <Button
                   onClick={() => onStateChange('dismissed')}
                   variant="ghost"

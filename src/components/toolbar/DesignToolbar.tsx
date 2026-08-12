@@ -4,14 +4,13 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { Textbox, FabricImage, Canvas } from 'fabric'
 import { useRef, useState } from 'react'
 import { Type, ImagePlus } from 'lucide-react'
-import { DesignMethodToggle } from '@/components/toolbar/DesignMethodToggle'
 import { BackCardOptions } from '@/components/toolbar/BackCardOptions'
 import {
   applyEngravedFiltersToImage,
   getCurrentEngravedColor,
   getCurrentDefaultPrintColor,
 } from '@/lib/engraved-filters'
-import { isEngravingMaterial } from '@/config/materials'
+import { isBackEngraved, isFrontEngraved, isSideEngraved } from '@/config/materials'
 import { isImageOpaque } from '@/lib/transparency'
 import { uploadOriginalSourceFile } from '@/lib/upload-asset'
 
@@ -96,7 +95,7 @@ function addImageToCanvas(
   canvas: Canvas,
   file: File,
   isEngraved: boolean,
-  setOpaqueWarning: (state: 'detected' | 'bg_removed' | 'printed' | 'dismissed' | null, imageId?: string | null) => void,
+  setOpaqueWarning: (state: 'detected' | 'bg_removed' | 'dismissed' | null, imageId?: string | null) => void,
 ) {
   const reader = new FileReader()
   reader.onload = async (event) => {
@@ -170,10 +169,12 @@ function addImageToCanvas(
 }
 
 export function AddElementButtons() {
-  const { designMethod, setOpaqueWarning } = useDesignStore()
+  const { materialId, activeSide, setOpaqueWarning } = useDesignStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const isEngraved = designMethod === 'engraved'
+  // Per side, not per design method: elements added to a printed back keep their
+  // full colour even though the front of the same card is engraved.
+  const isEngraved = isSideEngraved(materialId, activeSide)
 
   const addText = () => {
     const canvas = window.__fabricCanvas
@@ -238,19 +239,17 @@ export function AddElementButtons() {
 
 /** Mobile-only add elements with popover side picker (no layout shift) */
 export function MobileAddElements() {
-  const { designMethod, setOpaqueWarning, setActiveSide } = useDesignStore()
+  const { materialId, setOpaqueWarning, setActiveSide } = useDesignStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [textOpen, setTextOpen] = useState(false)
   const [imageOpen, setImageOpen] = useState(false)
-
-  const isEngraved = designMethod === 'engraved'
 
   const handleAddText = (side: CardSide) => {
     const canvas = getCanvasForSide(side)
     if (!canvas) return
     window.__fabricCanvas = canvas
     setActiveSide(side)
-    addTextToCanvas(canvas, isEngraved)
+    addTextToCanvas(canvas, isSideEngraved(materialId, side))
     setTextOpen(false)
   }
 
@@ -288,7 +287,9 @@ export function MobileAddElements() {
     const canvas = window.__fabricCanvas
     if (!canvas) return
 
-    addImageToCanvas(canvas, file, isEngraved, setOpaqueWarning)
+    // handlePickImageSide set the active side before opening the file dialog.
+    const { activeSide } = useDesignStore.getState()
+    addImageToCanvas(canvas, file, isSideEngraved(materialId, activeSide), setOpaqueWarning)
     e.target.value = ''
   }
 
@@ -355,6 +356,30 @@ export function MobileAddElements() {
   )
 }
 
+/**
+ * Replaces the old engraved/printed toggle on metal. The choice is gone, but the
+ * explanation of what the two sides get is still worth keeping.
+ */
+function EngravedFinishNote({ materialId }: { materialId: string | null }) {
+  return (
+    <div>
+      {/* "Finish" is already the variation selector's heading — this is the
+          decoration method, which used to be the engraved/printed toggle. */}
+      <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2.5">
+        Design Method
+      </h3>
+      <div className="rounded-lg border border-border bg-muted/40 px-3 py-2">
+        <p className="text-xs font-medium text-foreground">Laser engraved</p>
+        <p className="text-[10px] text-muted-foreground mt-1 leading-relaxed">
+          {isBackEngraved(materialId)
+            ? 'Single-colour laser engraved front, for the most premium finish. The back is always engraved for long-lasting QR durability.'
+            : 'Single-colour laser engraved front, for the most premium finish. The back is always printed.'}
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export function DesignToolbar() {
   const { activeSide, materialId } = useDesignStore()
 
@@ -362,8 +387,8 @@ export function DesignToolbar() {
 
   return (
     <div className="space-y-4">
-      {/* Design method toggle — metal only */}
-      {isEngravingMaterial(materialId) && <DesignMethodToggle />}
+      {/* Finish explainer — metal is engrave-only, so this is stated, not chosen */}
+      {isFrontEngraved(materialId) && <EngravedFinishNote materialId={materialId} />}
 
       {/* Add elements — hidden on mobile (shown near layers instead) */}
       <div className="hidden lg:block">

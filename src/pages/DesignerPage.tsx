@@ -8,6 +8,8 @@ import { RecentDesigns } from '@/components/recent/RecentDesigns'
 import { MyTemplates } from '@/components/recent/MyTemplates'
 import { useDesignStore } from '@/store/design-store'
 import { startAutoSave, loadDraft, restoreDraft, clearDraft } from '@/lib/auto-save'
+import { getDefaultDesignMethod } from '@/config/materials'
+import { LEGACY_PRINTED_METAL_NOTICE } from '@/lib/design-method'
 import { CreditCard, Plus, Loader2, RotateCcw, X, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -30,7 +32,10 @@ export function DesignerPage() {
   )
   const [templateWarning, setTemplateWarning] = useState<string | null>(() => {
     const warning = navState?.warning
-    return typeof warning === 'string' && warning.trim().length > 0 ? warning : null
+    if (typeof warning === 'string' && warning.trim().length > 0) return warning
+    // A template fork arrives with its own warning that already covers this; a
+    // design opened from a share link or Recent Designs does not.
+    return useDesignStore.getState().legacyPrintedMetal ? LEGACY_PRINTED_METAL_NOTICE : null
   })
   // Checked once on mount: not on shared design URLs, and never on top of a
   // design just forked from a template.
@@ -45,6 +50,16 @@ export function DesignerPage() {
   useEffect(() => {
     const cleanup = startAutoSave()
     return cleanup
+  }, [])
+
+  // Bring a loaded design or forked template in line with what its material now
+  // allows. The artwork is converted separately, by the canvases themselves, off
+  // the store's `legacyPrintedMetal` flag — this only moves the flag.
+  useEffect(() => {
+    const state = useDesignStore.getState()
+    const allowed = getDefaultDesignMethod(state.materialId)
+    // Guarded so an already-valid design is not marked dirty for no reason.
+    if (state.designMethod !== allowed) state.setDesignMethod(allowed)
   }, [])
 
   // Drop the router state once read so the notice cannot reappear on re-render
@@ -72,8 +87,9 @@ export function DesignerPage() {
   const handleRestoreDraft = () => {
     const draft = loadDraft()
     if (draft) {
-      restoreDraft(draft)
+      const { convertedToEngraved } = restoreDraft(draft)
       setDraftAvailable(false)
+      if (convertedToEngraved) setTemplateWarning(LEGACY_PRINTED_METAL_NOTICE)
     }
   }
 
@@ -86,6 +102,8 @@ export function DesignerPage() {
     // Briefly null out the variation to force effects to re-fire after reset
     useDesignStore.getState().setMaterial('', '')
     resetDesign()
+    // The notice belongs to the design being replaced.
+    setTemplateWarning(null)
     for (const canvas of [window.__fabricCanvasFront, window.__fabricCanvasBack]) {
       if (canvas) {
         canvas.getObjects().slice().forEach((obj) => canvas.remove(obj))

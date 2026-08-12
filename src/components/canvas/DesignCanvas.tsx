@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { Canvas, FabricObject, FabricImage, InteractiveFabricObject, Textbox, IText } from 'fabric'
 import { CARD_WIDTH, CARD_HEIGHT, CARD_CORNER_RADIUS } from '@/config/canvas'
 import { useDesignStore, type CardSide } from '@/store/design-store'
-import { getVariation, isEngravingMaterial, shouldHideWaveIcon } from '@/config/materials'
+import { getVariation, isFrontEngraved, shouldHideWaveIcon } from '@/config/materials'
 import { cn } from '@/lib/utils'
 import { LayersPanel } from '@/components/layers/LayersPanel'
 import { MobileAddElements } from '@/components/toolbar/DesignToolbar'
@@ -12,6 +12,7 @@ import { isCropping } from '@/lib/crop-tool'
 import { updateQrPlaceholder, updateVariableTexts, isLockedElement } from '@/lib/back-card'
 import { addWaveIcon, removeWaveIcon, updateWaveIconColor } from '@/lib/wave-icon'
 import { pushState, undo, redo, isHistoryLocked } from '@/lib/canvas-history'
+import { convertCanvasToEngraved } from '@/lib/design-method'
 import { attachGuides } from '@/lib/canvas-guides'
 
 // Lock text objects so they can only be resized via width (ml/mr) or rotated.
@@ -227,6 +228,11 @@ function CardCanvas({ side }: { side: CardSide }) {
         suppressSaveRef.current = false
 
         canvas.renderAll()
+
+        // A design saved as printed on a material that is now engrave-only opens
+        // with printed artwork. Converted here, where the objects are known to
+        // have landed; it is a no-op for everything else.
+        convertCanvasToEngraved(canvas, side)
       }).catch(console.error)
     }
 
@@ -409,7 +415,7 @@ function CardCanvas({ side }: { side: CardSide }) {
 
   // Get placeholder text color based on material
   const variation = variationId ? getVariation(variationId) : undefined
-  const placeholderColor = isEngravingMaterial(materialId)
+  const placeholderColor = isFrontEngraved(materialId)
     ? (variation?.engravedColor ?? '#C0C0C0')
     : (variation?.defaultPrintColor ?? '#000000')
 

@@ -1,7 +1,8 @@
 import { Canvas } from 'fabric'
-import { useDesignStore } from '@/store/design-store'
+import { useDesignStore, type DesignMethod } from '@/store/design-store'
 import { CUSTOM_PROPS } from './save-design'
 import { getDesignHistory } from './design-history'
+import { convertCanvasToEngraved, isLegacyPrintedMetal } from './design-method'
 
 const DRAFT_KEY = 'nfc_draft_design'
 const DEBOUNCE_MS = 2000
@@ -148,7 +149,7 @@ export function loadDraft(): DraftSnapshot | null {
 }
 
 /** Load JSON into a live Fabric canvas, setting crossOrigin on images. */
-function loadCanvasFromJson(canvas: Canvas, json: string): void {
+function loadCanvasFromJson(canvas: Canvas, json: string, onLoaded?: () => void): void {
   try {
     const parsed = JSON.parse(json)
     const objects = parsed?.objects as Record<string, unknown>[] | undefined
@@ -157,15 +158,30 @@ function loadCanvasFromJson(canvas: Canvas, json: string): void {
         if (obj.type === 'image' || obj.src) obj.crossOrigin = 'anonymous'
       }
     }
-    canvas.loadFromJSON(parsed).then(() => canvas.renderAll()).catch(console.error)
+    canvas.loadFromJSON(parsed).then(() => {
+      canvas.renderAll()
+      onLoaded?.()
+    }).catch(console.error)
   } catch {
     // Ignore parse errors
   }
 }
 
-/** Restore a draft into the Zustand store and reload live canvases. */
-export function restoreDraft(draft: DraftSnapshot): void {
+/**
+ * Restore a draft into the Zustand store and reload live canvases.
+ *
+ * Returns whether the draft was a metal design drafted before printed metal was
+ * withdrawn, so the caller can tell the user why their artwork changed.
+ */
+export function restoreDraft(draft: DraftSnapshot): { convertedToEngraved: boolean } {
   const store = useDesignStore.getState()
+  // Read before setMaterial/setDesignMethod clamp the method to the material.
+  const convertedToEngraved = isLegacyPrintedMetal(
+    draft.materialId,
+    draft.designMethod as DesignMethod,
+  )
+  // The canvases load on a timer below; convertCanvasToEngraved reads this.
+  useDesignStore.setState({ legacyPrintedMetal: convertedToEngraved })
   store.setMaterial(draft.materialId || 'plastic', draft.variationId || 'pvc-white')
   store.setDesignMethod(draft.designMethod as 'engraved' | 'printed')
   store.setDesignName(draft.designName)
@@ -198,12 +214,16 @@ export function restoreDraft(draft: DraftSnapshot): void {
   // settle first — avoids race condition where effects overwrite loaded objects
   setTimeout(() => {
     if (draft.frontCanvasJson && window.__fabricCanvasFront) {
-      loadCanvasFromJson(window.__fabricCanvasFront, draft.frontCanvasJson)
+      const canvas = window.__fabricCanvasFront
+      loadCanvasFromJson(canvas, draft.frontCanvasJson, () => convertCanvasToEngraved(canvas, 'front'))
     }
     if (draft.backCanvasJson && window.__fabricCanvasBack) {
-      loadCanvasFromJson(window.__fabricCanvasBack, draft.backCanvasJson)
+      const canvas = window.__fabricCanvasBack
+      loadCanvasFromJson(canvas, draft.backCanvasJson, () => convertCanvasToEngraved(canvas, 'back'))
     }
   }, 500)
+
+  return { convertedToEngraved }
 }
 
 /** Start listening for store changes and auto-saving drafts. Returns an unsubscribe function. */
