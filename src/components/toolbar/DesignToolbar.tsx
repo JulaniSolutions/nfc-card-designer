@@ -372,8 +372,8 @@ function EngravedFinishNote({ materialId }: { materialId: string | null }) {
         <p className="text-xs font-medium text-foreground">Laser engraved</p>
         <p className="text-[10px] text-muted-foreground mt-1 leading-relaxed">
           {isBackEngraved(materialId)
-            ? 'Single-colour laser engraved front, for the most premium finish. The back is always engraved for long-lasting QR durability.'
-            : 'Single-colour laser engraved front, for the most premium finish. The back is always printed.'}
+            ? 'Single colour. Both sides engraved.'
+            : 'Single colour. Back is printed.'}
         </p>
       </div>
     </div>
