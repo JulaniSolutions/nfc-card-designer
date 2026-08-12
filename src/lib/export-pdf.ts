@@ -2,7 +2,7 @@ import { jsPDF } from 'jspdf'
 import { Canvas, Textbox, IText, Rect, Group, FabricImage, type FabricObject } from 'fabric'
 import * as fabric from 'fabric'
 import { CARD_WIDTH, CARD_HEIGHT } from '@/config/canvas'
-import { useDesignStore } from '@/store/design-store'
+import { useDesignStore, type DesignMethod } from '@/store/design-store'
 import { isEngravingMaterial, isBackEngraved } from '@/config/materials'
 
 const CUSTOM_PROPS = [
@@ -230,7 +230,24 @@ function cleanup(tempCanvas: Canvas, tempCanvasEl: HTMLCanvasElement) {
   }
 }
 
-export async function exportDesignAsPdf(): Promise<void> {
+/**
+ * An explicit design to export, for pages that deliberately never populate the
+ * store. Without it the export silently falls back to whatever the visitor
+ * happens to have loaded — on a template page that means exporting their own
+ * card, card list and all, under someone else's template name.
+ */
+export interface PdfExportSnapshot {
+  frontCanvasJson: string | null
+  backCanvasJson: string | null
+  frontBgColor: string
+  backBgColor: string
+  materialId: string | null
+  designMethod: DesignMethod
+  quantity: number
+  cardData: Record<string, string>[]
+}
+
+export async function exportDesignAsPdf(snapshot?: PdfExportSnapshot): Promise<void> {
   const state = useDesignStore.getState()
 
   const pdf = new jsPDF({
@@ -239,15 +256,19 @@ export async function exportDesignAsPdf(): Promise<void> {
     format: [CARD_WIDTH_MM, CARD_HEIGHT_MM],
   })
 
-  // Save both canvases' current state (with custom props for QR/variable tags)
-  if (window.__fabricCanvasFront) {
-    state.setCanvasJson('front', JSON.stringify(window.__fabricCanvasFront.toObject(CUSTOM_PROPS)))
-  }
-  if (window.__fabricCanvasBack) {
-    state.setCanvasJson('back', JSON.stringify(window.__fabricCanvasBack.toObject(CUSTOM_PROPS)))
+  // Live canvases are the freshest source, but only when exporting the store's
+  // design. A snapshot caller has no mounted canvases and must not write to the store.
+  if (!snapshot) {
+    if (window.__fabricCanvasFront) {
+      state.setCanvasJson('front', JSON.stringify(window.__fabricCanvasFront.toObject(CUSTOM_PROPS)))
+    }
+    if (window.__fabricCanvasBack) {
+      state.setCanvasJson('back', JSON.stringify(window.__fabricCanvasBack.toObject(CUSTOM_PROPS)))
+    }
   }
 
-  const { frontCanvasJson, backCanvasJson, frontBgColor, backBgColor, quantity, cardData, designMethod, materialId } = useDesignStore.getState()
+  const { frontCanvasJson, backCanvasJson, frontBgColor, backBgColor, quantity, cardData, designMethod, materialId } =
+    snapshot ?? useDesignStore.getState()
   const isEngravedMode = designMethod === 'engraved' && isEngravingMaterial(materialId)
   const isBackEngravedMode = isEngravedMode && isBackEngraved(materialId)
 

@@ -30,6 +30,7 @@ export interface SavedDesign {
   variable_fields: { id: string; label: string }[] | null
   card_data: Record<string, string>[] | null
   quantity: number
+  source_template_id: string | null
   created_at: string
   updated_at: string
 }
@@ -236,7 +237,7 @@ export async function saveDesign(turnstileToken?: string | null): Promise<string
   }
 
   const state = refreshedState
-  const { materialId, variationId, frontCanvasJson, backCanvasJson, frontBgColor, backBgColor, designId, designName, designMethod, backOption, cardNames, variableFields, cardData, quantity } = state
+  const { materialId, variationId, frontCanvasJson, backCanvasJson, frontBgColor, backBgColor, designId, designName, designMethod, backOption, cardNames, variableFields, cardData, quantity, sourceTemplateId } = state
 
   // Generate a stable ID before the first attempt so retries don't create duplicates
   const effectiveId = designId || generateShortId()
@@ -256,6 +257,7 @@ export async function saveDesign(turnstileToken?: string | null): Promise<string
     variable_fields: variableFields,
     card_data: cardData,
     quantity,
+    source_template_id: sourceTemplateId,
     turnstile_token: turnstileToken,
   }
 
@@ -339,6 +341,7 @@ export async function loadDesign(id: string): Promise<boolean> {
     variableFields: design.variable_fields || undefined,
     cardData: design.card_data || undefined,
     quantity: design.quantity || 1,
+    sourceTemplateId: design.source_template_id ?? null,
   })
 
   return true

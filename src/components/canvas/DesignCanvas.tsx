@@ -209,6 +209,23 @@ function CardCanvas({ side }: { side: CardSide }) {
             lockTextControls(obj)
           }
         }
+
+        // loadFromJSON is async and clears the canvas before adding, so anything
+        // the QR-placeholder / wave-icon effects added while it was in flight has
+        // just been discarded. Their deps are stable by now (the state was set
+        // before mount), so they will not fire again on their own — re-run them
+        // here. Both are idempotent: they tag their objects and no-op if present.
+        const state = useDesignStore.getState()
+        suppressSaveRef.current = true
+        if (side === 'back') {
+          updateQrPlaceholder(canvas)
+          updateVariableTexts(canvas, state.variableFields, state.cardData)
+        } else if (!shouldHideWaveIcon(state.materialId)) {
+          const variation = state.variationId ? getVariation(state.variationId) : undefined
+          addWaveIcon(canvas, variation?.defaultPrintColor ?? '#000000')
+        }
+        suppressSaveRef.current = false
+
         canvas.renderAll()
       }).catch(console.error)
     }

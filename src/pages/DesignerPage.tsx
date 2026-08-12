@@ -1,20 +1,45 @@
 import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { DesignCanvas } from '@/components/canvas/DesignCanvas'
 import { DesignToolbar } from '@/components/toolbar/DesignToolbar'
 import { MaterialSelector } from '@/components/material/MaterialSelector'
 import { ActionBar } from '@/components/toolbar/ActionBar'
 import { RecentDesigns } from '@/components/recent/RecentDesigns'
+import { MyTemplates } from '@/components/recent/MyTemplates'
 import { useDesignStore } from '@/store/design-store'
 import { startAutoSave, loadDraft, restoreDraft, clearDraft } from '@/lib/auto-save'
-import { CreditCard, Plus, Loader2, RotateCcw, X } from 'lucide-react'
+import { CreditCard, Plus, Loader2, RotateCcw, X, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
+type DesignerLocationState = {
+  fromTemplate?: boolean
+  warning?: string
+}
+
 export function DesignerPage() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const designName = useDesignStore((s) => s.designName)
   const designId = useDesignStore((s) => s.designId)
   const isSaving = useDesignStore((s) => s.isSaving)
   const resetDesign = useDesignStore((s) => s.resetDesign)
-  const [draftAvailable, setDraftAvailable] = useState(false)
+  // Snapshotted on first render: the clearing effect below wipes location.state,
+  // so later renders must not re-read it.
+  const [navState] = useState<DesignerLocationState | null>(
+    () => (location.state as DesignerLocationState | null) ?? null
+  )
+  const [templateWarning, setTemplateWarning] = useState<string | null>(() => {
+    const warning = navState?.warning
+    return typeof warning === 'string' && warning.trim().length > 0 ? warning : null
+  })
+  // Checked once on mount: not on shared design URLs, and never on top of a
+  // design just forked from a template.
+  const [draftAvailable, setDraftAvailable] = useState(() => {
+    if (/^\/design\//.test(window.location.pathname)) return false
+    if (navState?.fromTemplate) return false
+    if (useDesignStore.getState().sourceTemplateId) return false
+    return loadDraft() !== null
+  })
 
   // Start auto-save on mount
   useEffect(() => {
@@ -22,13 +47,12 @@ export function DesignerPage() {
     return cleanup
   }, [])
 
-  // Check for a restorable draft on mount (only on fresh load, not shared design URLs)
+  // Drop the router state once read so the notice cannot reappear on re-render
+  // or back-navigation
   useEffect(() => {
-    const isSharedDesign = /^\/design\//.test(window.location.pathname)
-    if (isSharedDesign) return
-    const draft = loadDraft()
-    if (draft) setDraftAvailable(true)
-  }, [])
+    if (!navState) return
+    navigate(location.pathname, { replace: true, state: null })
+  }, [navState, navigate, location.pathname])
 
   // beforeunload warning for unsaved work
   useEffect(() => {
@@ -101,6 +125,21 @@ export function DesignerPage() {
           </div>
         </div>
       )}
+      {/* Template warning notice */}
+      {templateWarning && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="bg-card border border-border rounded-lg shadow-lg px-4 py-3 flex items-center gap-3">
+            <AlertTriangle className="size-4 text-foreground shrink-0" />
+            <p className="text-sm text-foreground">{templateWarning}</p>
+            <button
+              onClick={() => setTemplateWarning(null)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <header className="border-b border-border bg-card shrink-0 sticky top-0 z-40 lg:relative">
@@ -123,6 +162,7 @@ export function DesignerPage() {
                 New
               </Button>
               <RecentDesigns />
+              <MyTemplates />
             </div>
           </div>
           <ActionBar />
@@ -137,6 +177,7 @@ export function DesignerPage() {
             New
           </Button>
           <RecentDesigns />
+          <MyTemplates />
         </div>
       </header>
 

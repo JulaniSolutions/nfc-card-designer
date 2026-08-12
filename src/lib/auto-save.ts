@@ -23,6 +23,7 @@ interface DraftSnapshot {
   variableFields: { id: string; label: string }[]
   cardData: Record<string, string>[]
   quantity: number
+  sourceTemplateId: string | null
   savedAt: string
 }
 
@@ -57,6 +58,7 @@ function takeSnapshot(): DraftSnapshot {
     variableFields: s.variableFields,
     cardData: s.cardData,
     quantity: s.quantity,
+    sourceTemplateId: s.sourceTemplateId,
     savedAt: new Date().toISOString(),
   }
 }
@@ -183,6 +185,13 @@ export function restoreDraft(draft: DraftSnapshot): void {
       cardData: draft.cardData || [{ name: '' }],
       cardNames: draft.cardNames || [''],
     })
+  }
+
+  // Restore template provenance, otherwise a fork that was auto-saved and later
+  // restored saves with source_template_id null and the use_count trigger never
+  // fires for a fork that actually happened.
+  if (draft.sourceTemplateId) {
+    useDesignStore.setState({ sourceTemplateId: draft.sourceTemplateId })
   }
 
   // Defer canvas loading so material effects (wave icon, QR placeholder)

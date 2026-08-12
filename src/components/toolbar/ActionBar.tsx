@@ -15,8 +15,9 @@ import { exportDesignAsPdf } from '@/lib/export-pdf'
 import { isSupabaseConfigured } from '@/lib/supabase'
 import { sendDesignEmail } from '@/lib/send-design-email'
 import { TurnstileWidget } from '@/components/ui/TurnstileWidget'
+import { PublishTemplateDialog } from '@/components/toolbar/PublishTemplateDialog'
 import { isTurnstileEnabled, getTurnstileToken } from '@/lib/turnstile'
-import { Save, Share2, FileDown, Copy, Check, Mail, Loader2, AlertCircle, RefreshCw } from 'lucide-react'
+import { Save, Share2, FileDown, Copy, Check, Mail, Loader2, AlertCircle, RefreshCw, LayoutTemplate } from 'lucide-react'
 
 function slugify(text: string): string {
   return text
@@ -39,6 +40,7 @@ const SAFETY_TIMEOUT_MS = 120_000
 export function ActionBar() {
   const { isSaving, designId, designName, setDesignName, hasUnsavedChanges } = useDesignStore()
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false)
   const [shareUrl, setShareUrl] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -214,6 +216,19 @@ export function ActionBar() {
       )}
 
       <div className="flex items-center gap-1.5">
+        {/* Publishing requires a saved design — saveDesign is what uploads images to Storage */}
+        {designId && (
+          <Button
+            onClick={() => setTemplateDialogOpen(true)}
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            aria-label="Save as template"
+          >
+            <LayoutTemplate className="size-3.5" />
+            <span className="hidden sm:inline">Save as template</span>
+          </Button>
+        )}
         {designId && hasUnsavedChanges ? (
           <Button
             onClick={handleSaveChanges}
@@ -395,6 +410,8 @@ export function ActionBar() {
           )}
         </DialogContent>
       </Dialog>
+
+      <PublishTemplateDialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen} />
     </>
   )
 }

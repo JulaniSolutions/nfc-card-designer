@@ -130,6 +130,7 @@ Deno.serve(async (req) => {
       variable_fields,
       card_data,
       quantity,
+      source_template_id,
     } = body
 
     // Validate required fields
@@ -159,6 +160,22 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
 
+    // source_template_id feeds a trigger that increments a public counter, so an
+    // arbitrary string from the body must not reach it. Confirming the template
+    // exists and is published stops a typo or a scripted id from inflating a
+    // stranger's "used N times" — it cannot stop a determined caller from
+    // replaying real saves, which would need auth we don't have.
+    let attribution: string | null = null
+    if (typeof source_template_id === 'string' && /^[a-z0-9]{8}$/.test(source_template_id)) {
+      const { data: tpl } = await supabase
+        .from('templates')
+        .select('template_id')
+        .eq('template_id', source_template_id)
+        .eq('is_published', true)
+        .maybeSingle()
+      if (tpl) attribution = source_template_id
+    }
+
     const payload = {
       name: name || null,
       material_id,
@@ -174,6 +191,9 @@ Deno.serve(async (req) => {
       card_data: card_data || [],
       quantity: quantity || 1,
       updated_at: new Date().toISOString(),
+      // Only ever set, never cleared — a plain re-save must not wipe the attribution
+      // (and the use_count trigger fires once, on insert).
+      ...(attribution ? { source_template_id: attribution } : {}),
     }
 
     if (!design_id) {

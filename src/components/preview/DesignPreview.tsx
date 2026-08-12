@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { useDesignStore } from '@/store/design-store'
+import { useDesignStore, type BackOption, type DesignMethod, type VariableField } from '@/store/design-store'
 import { getMaterial, getVariation } from '@/config/materials'
 import { CARD_CORNER_RADIUS } from '@/config/canvas'
 import { renderCanvasToImage } from '@/lib/render-preview'
-import { Loader2, Pencil, FileDown, ImageDown } from 'lucide-react'
+import { Loader2, Pencil, FileDown, ImageDown, Lock, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { exportDesignAsPdf } from '@/lib/export-pdf'
 import JSZip from 'jszip'
@@ -62,25 +62,62 @@ async function downloadSourceFiles(files: SourceFile[]) {
   triggerBlobDownload(zipBlob, 'source-files.zip')
 }
 
-interface DesignPreviewProps {
-  onEdit: () => void
+/**
+ * Snapshot overrides. When omitted the preview reads the design store, exactly as it
+ * always has. Templates pass their own snapshot so that merely *viewing* one never
+ * touches the store — and so never clobbers the visitor's in-progress design.
+ */
+interface DesignPreviewSnapshot {
+  frontCanvasJson?: string | null
+  backCanvasJson?: string | null
+  frontBgColor?: string
+  backBgColor?: string
+  materialId?: string | null
+  variationId?: string | null
+  designMethod?: DesignMethod
+  backOption?: BackOption
+  variableFields?: VariableField[]
 }
 
-export function DesignPreview({ onEdit }: DesignPreviewProps) {
-  const {
-    frontCanvasJson,
-    backCanvasJson,
-    frontBgColor,
-    backBgColor,
-    variationId,
-    materialId,
-    designName,
-    designMethod,
-    backOption,
-    variableFields,
-    cardData,
-    quantity,
-  } = useDesignStore()
+interface DesignPreviewProps extends DesignPreviewSnapshot {
+  onEdit: () => void
+  mode?: 'design' | 'template'
+  templateName?: string
+  useCount?: number
+  warning?: string | null
+}
+
+export function DesignPreview({
+  onEdit,
+  mode = 'design',
+  templateName,
+  useCount,
+  warning,
+  frontCanvasJson: frontCanvasJsonProp,
+  backCanvasJson: backCanvasJsonProp,
+  frontBgColor: frontBgColorProp,
+  backBgColor: backBgColorProp,
+  materialId: materialIdProp,
+  variationId: variationIdProp,
+  designMethod: designMethodProp,
+  backOption: backOptionProp,
+  variableFields: variableFieldsProp,
+}: DesignPreviewProps) {
+  const store = useDesignStore()
+  const { designName, cardData, quantity } = store
+
+  const isTemplate = mode === 'template'
+
+  // `undefined` means "not overridden" — `null` is a legitimate override value for canvas JSON.
+  const frontCanvasJson = frontCanvasJsonProp !== undefined ? frontCanvasJsonProp : store.frontCanvasJson
+  const backCanvasJson = backCanvasJsonProp !== undefined ? backCanvasJsonProp : store.backCanvasJson
+  const frontBgColor = frontBgColorProp !== undefined ? frontBgColorProp : store.frontBgColor
+  const backBgColor = backBgColorProp !== undefined ? backBgColorProp : store.backBgColor
+  const materialId = materialIdProp !== undefined ? materialIdProp : store.materialId
+  const variationId = variationIdProp !== undefined ? variationIdProp : store.variationId
+  const designMethod = designMethodProp !== undefined ? designMethodProp : store.designMethod
+  const backOption = backOptionProp !== undefined ? backOptionProp : store.backOption
+  const variableFields = variableFieldsProp !== undefined ? variableFieldsProp : store.variableFields
 
   const [frontImage, setFrontImage] = useState<string | null>(null)
   const [backImage, setBackImage] = useState<string | null>(null)
@@ -111,6 +148,31 @@ export function DesignPreview({ onEdit }: DesignPreviewProps) {
     return () => { cancelled = true }
   }, [frontCanvasJson, backCanvasJson, frontBgColor, backBgColor, variationId])
 
+  const handleDownloadPdf = async () => {
+    try {
+      // A template page never populates the store, so exporting from it would
+      // otherwise produce the visitor's own design — blank at best, and at worst
+      // their artwork and card list under someone else's template name.
+      await exportDesignAsPdf(
+        isTemplate
+          ? {
+              frontCanvasJson,
+              backCanvasJson,
+              frontBgColor,
+              backBgColor,
+              materialId,
+              designMethod,
+              // A template carries no per-card values, so it is always a single proof card.
+              quantity: 1,
+              cardData: [{}],
+            }
+          : undefined,
+      )
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to export PDF')
+    }
+  }
+
   if (rendering) {
     return (
       <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 flex items-center justify-center">
@@ -127,9 +189,21 @@ export function DesignPreview({ onEdit }: DesignPreviewProps) {
       <div className="w-full max-w-4xl space-y-8">
         {/* Header */}
         <div className="text-center space-y-2">
-          <h1 className="text-2xl font-semibold text-foreground">
-            {designName || 'Untitled Design'}
-          </h1>
+          {isTemplate ? (
+            <div className="flex items-center justify-center gap-2">
+              <h1 className="text-2xl font-semibold text-foreground">
+                {templateName || 'Untitled Template'}
+              </h1>
+              <span className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                <Lock className="size-3" />
+                Template
+              </span>
+            </div>
+          ) : (
+            <h1 className="text-2xl font-semibold text-foreground">
+              {designName || 'Untitled Design'}
+            </h1>
+          )}
           <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
             {material && <span>{material.name}</span>}
             {material && variation && <span>&middot;</span>}
@@ -139,6 +213,11 @@ export function DesignPreview({ onEdit }: DesignPreviewProps) {
               {designMethod}
             </span>
           </div>
+          {isTemplate && useCount !== undefined && useCount > 0 && (
+            <p className="text-xs text-muted-foreground/70">
+              Used {useCount} {useCount === 1 ? 'time' : 'times'}
+            </p>
+          )}
         </div>
 
         {/* Cards */}
@@ -167,8 +246,15 @@ export function DesignPreview({ onEdit }: DesignPreviewProps) {
           </div>
         </div>
 
+        {/* Personalisation fields — a template carries field definitions but no values */}
+        {isTemplate && backOption === 'qr-name' && variableFields.length > 0 && (
+          <p className="text-xs text-muted-foreground text-center">
+            Personalisation fields: {variableFields.map((field) => field.label).join(', ')}
+          </p>
+        )}
+
         {/* Card variables */}
-        {backOption === 'qr-name' && cardData.length > 0 && (
+        {!isTemplate && backOption === 'qr-name' && cardData.length > 0 && (
           <div className="max-w-xl mx-auto">
             <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3 text-center">
               Card Details — {quantity} {quantity === 1 ? 'card' : 'cards'}
@@ -202,47 +288,58 @@ export function DesignPreview({ onEdit }: DesignPreviewProps) {
           </div>
         )}
 
+        {warning && (
+          <div className="max-w-xl mx-auto rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5">
+            <p className="text-xs text-amber-700 dark:text-amber-400 text-center">{warning}</p>
+          </div>
+        )}
+
         {/* Actions */}
         <div className="flex justify-center gap-3">
-          <Button
-            size="lg"
-            className="gap-2"
-            onClick={async () => {
-              try {
-                await exportDesignAsPdf()
-              } catch (err) {
-                alert(err instanceof Error ? err.message : 'Failed to export PDF')
-              }
-            }}
-          >
-            <FileDown className="size-4" />
-            Download PDF
-          </Button>
-          {sourceFiles.length > 0 && (
-            <Button
-              size="lg"
-              variant="outline"
-              className="gap-2"
-              disabled={downloadingSource}
-              onClick={async () => {
-                setDownloadingSource(true)
-                try {
-                  await downloadSourceFiles(sourceFiles)
-                } catch {
-                  alert('Failed to download source files')
-                } finally {
-                  setDownloadingSource(false)
-                }
-              }}
-            >
-              {downloadingSource ? <Loader2 className="size-4 animate-spin" /> : <ImageDown className="size-4" />}
-              {downloadingSource ? 'Downloading...' : 'Download Source Files'}
-            </Button>
+          {isTemplate ? (
+            <>
+              <Button size="lg" className="gap-2" onClick={onEdit}>
+                <Wand2 className="size-4" />
+                Use this template
+              </Button>
+              <Button size="lg" variant="outline" className="gap-2" onClick={handleDownloadPdf}>
+                <FileDown className="size-4" />
+                Download PDF
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button size="lg" className="gap-2" onClick={handleDownloadPdf}>
+                <FileDown className="size-4" />
+                Download PDF
+              </Button>
+              {sourceFiles.length > 0 && (
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="gap-2"
+                  disabled={downloadingSource}
+                  onClick={async () => {
+                    setDownloadingSource(true)
+                    try {
+                      await downloadSourceFiles(sourceFiles)
+                    } catch {
+                      alert('Failed to download source files')
+                    } finally {
+                      setDownloadingSource(false)
+                    }
+                  }}
+                >
+                  {downloadingSource ? <Loader2 className="size-4 animate-spin" /> : <ImageDown className="size-4" />}
+                  {downloadingSource ? 'Downloading...' : 'Download Source Files'}
+                </Button>
+              )}
+              <Button size="lg" variant="outline" onClick={onEdit} className="gap-2">
+                <Pencil className="size-4" />
+                Edit Design
+              </Button>
+            </>
           )}
-          <Button size="lg" variant="outline" onClick={onEdit} className="gap-2">
-            <Pencil className="size-4" />
-            Edit Design
-          </Button>
         </div>
       </div>
     </div>

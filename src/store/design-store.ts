@@ -56,6 +56,9 @@ export interface DesignState {
   lastSaved: Date | null
   hasUnsavedChanges: boolean
 
+  // Template this design was forked from (attribution only — never set on a template itself)
+  sourceTemplateId: string | null
+
   // Actions
   resetDesign: () => void
   setOpaqueWarning: (state: 'detected' | 'bg_removed' | 'printed' | 'dismissed' | null, imageId?: string | null) => void
@@ -93,6 +96,21 @@ export interface DesignState {
     variableFields?: VariableField[]
     cardData?: CardData
     quantity?: number
+    sourceTemplateId?: string | null
+  }) => void
+  /** Fork a template into a fresh, unsaved design. Never sets designId. */
+  loadFromTemplate: (data: {
+    materialId: string
+    variationId: string
+    frontCanvasJson: string | null
+    backCanvasJson: string | null
+    frontBgColor: string
+    backBgColor: string
+    designName: string
+    designMethod?: DesignMethod
+    backOption?: BackOption
+    variableFields?: VariableField[]
+    sourceTemplateId: string
   }) => void
 }
 
@@ -122,6 +140,7 @@ export const useDesignStore = create<DesignState>((set, get) => ({
   isSaving: false,
   lastSaved: null,
   hasUnsavedChanges: false,
+  sourceTemplateId: null,
 
   resetDesign: () => set({
     materialId: 'plastic',
@@ -145,6 +164,7 @@ export const useDesignStore = create<DesignState>((set, get) => ({
     isSaving: false,
     lastSaved: null,
     hasUnsavedChanges: false,
+    sourceTemplateId: null,
   }),
 
   setOpaqueWarning: (state, imageId) => set({
@@ -237,10 +257,9 @@ export const useDesignStore = create<DesignState>((set, get) => ({
     if (id === 'name') return // Can't remove Name
     const { variableFields, cardData, designId } = get()
     const newFields = variableFields.filter((f) => f.id !== id)
-    const newData = cardData.map((row) => {
-      const { [id]: _, ...rest } = row
-      return rest
-    })
+    const newData = cardData.map((row) =>
+      Object.fromEntries(Object.entries(row).filter(([key]) => key !== id))
+    )
     const updates: Partial<DesignState> = { variableFields: newFields, cardData: newData }
     if (designId) updates.hasUnsavedChanges = true
     set(updates)
@@ -317,7 +336,43 @@ export const useDesignStore = create<DesignState>((set, get) => ({
       variableFields,
       cardData,
       quantity,
+      sourceTemplateId: data.sourceTemplateId ?? null,
       hasUnsavedChanges: false,
+    })
+  },
+
+  loadFromTemplate: (data) => {
+    // A fork starts life as an unsaved design: no designId, no per-card data.
+    // variableFields definitions carry over (they're design structure), values don't.
+    const variableFields = data.variableFields?.length
+      ? data.variableFields.map((f) => ({ ...f }))
+      : [{ ...DEFAULT_NAME_FIELD }]
+    const emptyRow: Record<string, string> = {}
+    for (const field of variableFields) emptyRow[field.id] = ''
+
+    set({
+      materialId: data.materialId,
+      variationId: data.variationId,
+      designMethod: data.designMethod ?? 'printed',
+      savedPrintColors: new Map<string, string>(),
+      activeSide: 'front',
+      frontCanvasJson: data.frontCanvasJson,
+      backCanvasJson: data.backCanvasJson,
+      frontBgColor: data.frontBgColor,
+      backBgColor: data.backBgColor,
+      designName: data.designName,
+      backOption: data.backOption ?? 'qr-only',
+      cardNames: [''],
+      variableFields,
+      cardData: [emptyRow],
+      quantity: 1,
+      opaqueImageWarning: null,
+      opaqueImageId: null,
+      designId: null,
+      isSaving: false,
+      lastSaved: null,
+      hasUnsavedChanges: false,
+      sourceTemplateId: data.sourceTemplateId,
     })
   },
 }))

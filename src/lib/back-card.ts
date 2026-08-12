@@ -6,15 +6,17 @@ import { useDesignStore, type VariableField, type CardData } from '@/store/desig
 const QR_SIZE = 236 // ~20mm on CR80
 const QR_LABEL_FONT = 'Arial'
 const VARIABLE_FONT = 'Arial'
-const VARIABLE_FONT_SIZE = 34
+// ~3.7mm on CR80 (roughly 10.5pt) — reads as a name, not a footnote
+const VARIABLE_FONT_SIZE = 44
 
 // Padding from card edges
 const EDGE_PAD = 60
 // Metal NFC chip zone: right 1/3 of card is reserved
 const METAL_USABLE_WIDTH = CARD_WIDTH * 2 / 3
 
-// Vertical offset between stacked variable texts
-const VARIABLE_STACK_OFFSET = 50
+// Vertical offset between stacked variable texts.
+// Must stay clear of the default line height (fontSize * ~1.16) or stacked fields overlap.
+const VARIABLE_STACK_OFFSET = 64
 
 export type BackOption = 'qr-only' | 'qr-name'
 
@@ -268,11 +270,15 @@ export function updateVariableTexts(canvas: Canvas, variableFields: VariableFiel
         // Temporarily remove the changed listener to avoid store → canvas → store loop
         existing.off('changed')
         existing.set('text', displayText)
-        // Re-attach listener
-        existing.on('changed', () => {
-          useDesignStore.getState().setCardValue(0, field.id, existing.text || '')
-        })
       }
+      // Always (re)bind, not just when the text changed. Objects restored from
+      // saved JSON — a loaded design or a forked template — arrive with no
+      // listeners at all, and if their text already matches the store the old
+      // conditional never bound one, so typing into them updated nothing.
+      existing.off('changed')
+      existing.on('changed', () => {
+        useDesignStore.getState().setCardValue(0, field.id, existing.text || '')
+      })
       if (existing.fill !== color) {
         existing.set('fill', color)
       }
