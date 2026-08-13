@@ -17,17 +17,8 @@ import { sendDesignEmail } from '@/lib/send-design-email'
 import { TurnstileWidget } from '@/components/ui/TurnstileWidget'
 import { PublishTemplateDialog } from '@/components/toolbar/PublishTemplateDialog'
 import { isTurnstileEnabled, getTurnstileToken } from '@/lib/turnstile'
+import { slugify } from '@/lib/utils'
 import { Save, Share2, FileDown, Copy, Check, Mail, Loader2, AlertCircle, RefreshCw, LayoutTemplate } from 'lucide-react'
-
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/[\s_]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-}
 
 function buildShareUrl(id: string, name: string): string {
   const slug = slugify(name)
@@ -403,7 +394,7 @@ export function ActionBar() {
                 <h4 className="text-xs font-medium text-muted-foreground">Download</h4>
                 <Button onClick={handleDownload} variant="outline" className="w-full gap-1.5 h-8">
                   <FileDown className="size-3.5" />
-                  Download PDF
+                  Download Preview
                 </Button>
               </div>
             </div>

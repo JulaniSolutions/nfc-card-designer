@@ -3,64 +3,11 @@ import { useDesignStore, type BackOption, type DesignMethod, type VariableField 
 import { getMaterial, getVariation } from '@/config/materials'
 import { CARD_CORNER_RADIUS } from '@/config/canvas'
 import { renderCanvasToImage } from '@/lib/render-preview'
-import { Loader2, Pencil, FileDown, ImageDown, Lock, Wand2 } from 'lucide-react'
+import { Loader2, Pencil, FileDown, Printer, Lock, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { exportDesignAsPdf } from '@/lib/export-pdf'
-import JSZip from 'jszip'
-
-interface SourceFile {
-  url: string
-  name: string
-}
-
-function extractSourceFiles(frontJson: string | null, backJson: string | null): SourceFile[] {
-  const files: SourceFile[] = []
-  const seen = new Set<string>()
-
-  for (const json of [frontJson, backJson]) {
-    if (!json) continue
-    try {
-      const parsed = JSON.parse(json)
-      for (const obj of parsed.objects ?? []) {
-        if (!obj._designId) continue
-        const url = obj._originalAssetUrl || obj._assetUrl
-        if (!url || seen.has(url)) continue
-        seen.add(url)
-        files.push({ url, name: obj._assetName || 'image' })
-      }
-    } catch { /* skip malformed JSON */ }
-  }
-  return files
-}
-
-function triggerBlobDownload(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
-}
-
-async function downloadSourceFiles(files: SourceFile[]) {
-  if (files.length === 1) {
-    const res = await fetch(files[0].url)
-    const blob = await res.blob()
-    triggerBlobDownload(blob, files[0].name)
-    return
-  }
-
-  const zip = new JSZip()
-  await Promise.all(files.map(async (file) => {
-    const res = await fetch(file.url)
-    const blob = await res.blob()
-    zip.file(file.name, blob)
-  }))
-  const zipBlob = await zip.generateAsync({ type: 'blob' })
-  triggerBlobDownload(zipBlob, 'source-files.zip')
-}
+import { exportPrintFiles } from '@/lib/export-print'
+import { triggerBlobDownload } from '@/lib/download'
 
 /**
  * Snapshot overrides. When omitted the preview reads the design store, exactly as it
@@ -122,11 +69,11 @@ export function DesignPreview({
   const [frontImage, setFrontImage] = useState<string | null>(null)
   const [backImage, setBackImage] = useState<string | null>(null)
   const [rendering, setRendering] = useState(true)
-  const [downloadingSource, setDownloadingSource] = useState(false)
+  const [exportingPrint, setExportingPrint] = useState(false)
+  const [printWarnings, setPrintWarnings] = useState<string[]>([])
 
   const material = materialId ? getMaterial(materialId) : null
   const variation = variationId ? getVariation(variationId) : null
-  const sourceFiles = extractSourceFiles(frontCanvasJson, backCanvasJson)
 
   useEffect(() => {
     let cancelled = false
@@ -170,6 +117,40 @@ export function DesignPreview({
       )
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to export PDF')
+    }
+  }
+
+  const handleDownloadPrintFiles = async () => {
+    // Print files are a production artefact of a real design — a template carries
+    // no card data and no order behind it, so the button never renders there.
+    if (isTemplate) return
+
+    setExportingPrint(true)
+    setPrintWarnings([])
+    try {
+      // This page shows a *loaded* design, not the editor's: pass the values it is
+      // actually displaying rather than letting the export reach for the live
+      // canvases, which belong to whatever the visitor last had open.
+      const result = await exportPrintFiles({
+        frontCanvasJson,
+        backCanvasJson,
+        frontBgColor,
+        backBgColor,
+        materialId,
+        variationId,
+        designMethod,
+        backOption,
+        quantity,
+        cardData,
+        variableFields,
+        designName,
+      })
+      triggerBlobDownload(result.blob, result.filename)
+      setPrintWarnings(result.warnings)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to export print files')
+    } finally {
+      setExportingPrint(false)
     }
   }
 
@@ -294,6 +275,16 @@ export function DesignPreview({
           </div>
         )}
 
+        {printWarnings.length > 0 && (
+          <div className="max-w-xl mx-auto rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 space-y-1.5">
+            {printWarnings.map((printWarning, i) => (
+              <p key={i} className="text-xs text-amber-700 dark:text-amber-400 text-center">
+                {printWarning}
+              </p>
+            ))}
+          </div>
+        )}
+
         {/* Actions */}
         <div className="flex justify-center gap-3">
           {isTemplate ? (
@@ -311,29 +302,18 @@ export function DesignPreview({
             <>
               <Button size="lg" className="gap-2" onClick={handleDownloadPdf}>
                 <FileDown className="size-4" />
-                Download PDF
+                Download Preview
               </Button>
-              {sourceFiles.length > 0 && (
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="gap-2"
-                  disabled={downloadingSource}
-                  onClick={async () => {
-                    setDownloadingSource(true)
-                    try {
-                      await downloadSourceFiles(sourceFiles)
-                    } catch {
-                      alert('Failed to download source files')
-                    } finally {
-                      setDownloadingSource(false)
-                    }
-                  }}
-                >
-                  {downloadingSource ? <Loader2 className="size-4 animate-spin" /> : <ImageDown className="size-4" />}
-                  {downloadingSource ? 'Downloading...' : 'Download Source Files'}
-                </Button>
-              )}
+              <Button
+                size="lg"
+                variant="outline"
+                className="gap-2"
+                disabled={exportingPrint}
+                onClick={handleDownloadPrintFiles}
+              >
+                {exportingPrint ? <Loader2 className="size-4 animate-spin" /> : <Printer className="size-4" />}
+                {exportingPrint ? 'Preparing files...' : 'Download Print Files'}
+              </Button>
               <Button size="lg" variant="outline" onClick={onEdit} className="gap-2">
                 <Pencil className="size-4" />
                 Edit Design
