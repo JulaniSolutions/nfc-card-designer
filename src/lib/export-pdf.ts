@@ -4,14 +4,8 @@ import * as fabric from 'fabric'
 import { CARD_WIDTH, CARD_HEIGHT } from '@/config/canvas'
 import { useDesignStore, type DesignMethod } from '@/store/design-store'
 import { isFrontEngraved, isBackEngraved } from '@/config/materials'
-
-const CUSTOM_PROPS = [
-  '_waveIcon', '_isLocked', '_layerLabel', '_isPlaceholder',
-  '_qrPlaceholderBorder', '_qrPlaceholderLabel', '_backNameText',
-  '_variableId',
-  '_designId', '_isOpaque', '_addedInEngraved', '_originalSrc', '_layerType',
-  '_assetUrl', '_assetName', '_undeletable',
-]
+import { CUSTOM_PROPS } from '@/lib/custom-props'
+import { slugify } from '@/lib/utils'
 
 const pxToMmX = (px: number, cardWidthMm: number) =>
   (px / CARD_WIDTH) * cardWidthMm
@@ -245,9 +239,18 @@ export interface PdfExportSnapshot {
   designMethod: DesignMethod
   quantity: number
   cardData: Record<string, string>[]
+  /** Only used for the download filename; falls back to `nfc-card`. */
+  designName?: string
 }
 
-export async function exportDesignAsPdf(snapshot?: PdfExportSnapshot): Promise<void> {
+/**
+ * Build the proof PDF — a layered, text-as-vector preview of the design.
+ *
+ * Returns the jsPDF document rather than saving it, so callers can either
+ * download it (`exportDesignAsPdf`) or embed it as `preview.pdf` in the print
+ * bundle via `.output('blob')`.
+ */
+export async function buildDesignPdf(snapshot?: PdfExportSnapshot): Promise<jsPDF> {
   const state = useDesignStore.getState()
 
   const pdf = new jsPDF({
@@ -270,8 +273,8 @@ export async function exportDesignAsPdf(snapshot?: PdfExportSnapshot): Promise<v
   const { frontCanvasJson, backCanvasJson, frontBgColor, backBgColor, quantity, cardData, designMethod, materialId } =
     snapshot ?? useDesignStore.getState()
   // Still gated on the stored method, not just the material: a design saved as
-  // printed metal before that option was withdrawn exports as it was ordered,
-  // with no laser production pages.
+  // printed metal before that option was withdrawn proofs as it was ordered —
+  // one back page per card rather than the single engraved proof card.
   const isEngravedMode = designMethod === 'engraved' && isFrontEngraved(materialId)
   const isBackEngravedMode = isEngravedMode && isBackEngraved(materialId)
 
@@ -314,47 +317,15 @@ export async function exportDesignAsPdf(snapshot?: PdfExportSnapshot): Promise<v
 
   cleanup(back.tempCanvas, back.tempCanvasEl)
 
-  // === Production pages for engraved designs ===
-  if (isEngravedMode) {
-    // Production front page — white bg, black elements
-    const prodFront = await prepareSide(frontCanvasJson, '#ffffff')
-    pdf.addPage([CARD_WIDTH_MM, CARD_HEIGHT_MM], 'landscape')
-    pdf.setFillColor(255, 255, 255)
-    pdf.rect(0, 0, CARD_WIDTH_MM, CARD_HEIGHT_MM, 'F')
-    renderObjectsToPdf(pdf, prodFront.objects, true)
-    cleanup(prodFront.tempCanvas, prodFront.tempCanvasEl)
+  // Proof only — engraved production artwork now ships as the print-file rasters.
+  return pdf
+}
 
-    // Production back pages — only for materials where back is also engraved (Full Metal)
-    if (isBackEngravedMode) {
-      const prodBack = await prepareSide(backCanvasJson, '#ffffff')
-      const prodVariableObjs = prodBack.objects.filter((obj) =>
-        (obj as FabricObject & { _variableId?: string })._variableId
-      )
-      const prodStaticObjs = prodBack.objects.filter((obj) =>
-        !(obj as FabricObject & { _variableId?: string })._variableId
-      )
+export async function exportDesignAsPdf(snapshot?: PdfExportSnapshot): Promise<void> {
+  const pdf = await buildDesignPdf(snapshot)
 
-      for (let i = 0; i < quantity; i++) {
-        pdf.addPage([CARD_WIDTH_MM, CARD_HEIGHT_MM], 'landscape')
-        pdf.setFillColor(255, 255, 255)
-        pdf.rect(0, 0, CARD_WIDTH_MM, CARD_HEIGHT_MM, 'F')
+  const designName = snapshot ? snapshot.designName : useDesignStore.getState().designName
+  const slug = slugify(designName || '') || 'nfc-card'
 
-        renderObjectsToPdf(pdf, prodStaticObjs, true)
-
-        const values = cardData[i] || {}
-        for (const obj of prodVariableObjs) {
-          const tagged = obj as Textbox & { _variableId?: string }
-          const value = values[tagged._variableId!] || ''
-          const originalText = tagged.text
-          tagged.set('text', value)
-          renderTextToPdf(pdf, tagged, tagged.left || 0, tagged.top || 0, tagged.opacity ?? 1, true)
-          tagged.set('text', originalText!)
-        }
-      }
-
-      cleanup(prodBack.tempCanvas, prodBack.tempCanvasEl)
-    }
-  }
-
-  pdf.save('nfc-card-design.pdf')
+  pdf.save(`${slug}-preview.pdf`)
 }

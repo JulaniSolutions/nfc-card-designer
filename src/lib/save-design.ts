@@ -5,14 +5,10 @@ import { uploadOriginalAsset } from './upload-asset'
 import { fetchWithTimeout } from './fetch-with-timeout'
 import { clearDraft } from './auto-save'
 import { FabricImage } from 'fabric'
+import { CUSTOM_PROPS } from './custom-props'
 
-export const CUSTOM_PROPS = [
-  '_waveIcon', '_isLocked', '_layerLabel', '_isPlaceholder',
-  '_qrPlaceholderBorder', '_qrPlaceholderLabel', '_backNameText',
-  '_variableId',
-  '_designId', '_isOpaque', '_addedInEngraved', '_originalSrc', '_layerType',
-  '_assetUrl', '_assetName', '_originalAssetUrl', '_undeletable',
-]
+// Re-exported for the existing importers (auto-save, templates, design-method)
+export { CUSTOM_PROPS }
 
 export interface SavedDesign {
   id: string

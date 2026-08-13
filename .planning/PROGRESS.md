@@ -17,8 +17,8 @@ fresh session can resume from this file alone. Branch: `production-export`
 
 ## Phase 1 — Print-ready export engine (PLAN-01)
 
-- [ ] **P1.a** `src/lib/custom-props.ts` — single `CUSTOM_PROPS`, consumed by save-design / DesignCanvas / export-pdf (fixes `_originalAssetUrl` clobber bug)
-- [ ] **P1.a** `export-pdf.ts` refactor: `buildDesignPdf()`, proof-only (production pages removed), slug filename
+- [x] **P1.a** `src/lib/custom-props.ts` — single `CUSTOM_PROPS`, consumed by save-design / DesignCanvas / export-pdf (fixes `_originalAssetUrl` clobber bug)
+- [x] **P1.a** `export-pdf.ts` refactor: `buildDesignPdf()`, proof-only (production pages removed), slug filename
 - [ ] **P1.b** `src/lib/download.ts` — extracted `triggerBlobDownload` + zip helpers
 - [ ] **P1.b** `src/lib/export-print.ts` — side renderer (600 DPI, per-side engrave/print matrix, placeholder strip + geometry capture, per-card variable substitution, count rules)
 - [ ] **P1.b** Bundle assembly: `print/`, `source/`, `links.csv`, `preview.pdf`, naming spec, `PrintExportResult.files` for PLAN-04
@@ -66,3 +66,13 @@ _(append dated entries here — implementer deviations, plan gaps, spike results
   packets is therefore **zero new problems vs the baseline snapshot**; fixing the
   pre-existing errors is out of scope (would be a drive-by refactor of files most
   packets don't own). `npm run build` is clean and stays a hard gate.
+- **2026-08-13 (P1.a):** `PdfExportSnapshot` gained optional `designName?` (filename
+  only; snapshot callers never fall back to the store, preserving template-export
+  isolation). `save-design.ts` re-exports `CUSTOM_PROPS` so `auto-save.ts`,
+  `templates.ts`, `design-method.ts` (files outside P1.a) stay untouched. The
+  now-unreachable `productionMode` branches in export-pdf's proof renderers were
+  left in place — the plan says keep proof pages exactly as-is. `_qrInjected` still
+  to be added to `custom-props.ts` by P2.a (flagged so it isn't lost).
+- **2026-08-13 (orchestrator):** No `.env` in this environment (only `.env.example`)
+  — Playwright specs needing a saved design (`/design/:id`) must stub Supabase via
+  Playwright network interception; live-Supabase E2E stays manual.
