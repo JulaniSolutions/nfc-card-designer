@@ -19,9 +19,9 @@ fresh session can resume from this file alone. Branch: `production-export`
 
 - [x] **P1.a** `src/lib/custom-props.ts` — single `CUSTOM_PROPS`, consumed by save-design / DesignCanvas / export-pdf (fixes `_originalAssetUrl` clobber bug)
 - [x] **P1.a** `export-pdf.ts` refactor: `buildDesignPdf()`, proof-only (production pages removed), slug filename
-- [ ] **P1.b** `src/lib/download.ts` — extracted `triggerBlobDownload` + zip helpers
-- [ ] **P1.b** `src/lib/export-print.ts` — side renderer (600 DPI, per-side engrave/print matrix, placeholder strip + geometry capture, per-card variable substitution, count rules)
-- [ ] **P1.b** Bundle assembly: `print/`, `source/`, `links.csv`, `preview.pdf`, naming spec, `PrintExportResult.files` for PLAN-04
+- [x] **P1.b** `src/lib/download.ts` — extracted `triggerBlobDownload` + zip helpers
+- [x] **P1.b** `src/lib/export-print.ts` — side renderer (600 DPI, per-side engrave/print matrix, placeholder strip + geometry capture, per-card variable substitution, count rules)
+- [x] **P1.b** Bundle assembly: `print/`, `source/`, `links.csv`, `preview.pdf`, naming spec, `PrintExportResult.files` for PLAN-04
 - [ ] **P1.c** UI: DesignPreview — "Download Preview", "Download Print Files" (+ warnings), source-files button removed; ActionBar dialog renamed
 - [ ] **P1.d** `supabase/functions/generate-pdf/` deleted
 - [ ] **P1.d** Playwright coverage per PLAN-01 testing section
@@ -73,6 +73,24 @@ _(append dated entries here — implementer deviations, plan gaps, spike results
   now-unreachable `productionMode` branches in export-pdf's proof renderers were
   left in place — the plan says keep proof pages exactly as-is. `_qrInjected` still
   to be added to `custom-props.ts` by P2.a (flagged so it isn't lost).
+- **2026-08-13 (P1.b):** Deviations, all additive: `PrintExportResult.legacyPrintedMetal?`
+  flag added (PLAN-01 requires it, PLAN-00's frozen shape omitted it); `PrintQrImage`
+  geometry fields optional, defaulting to the captured placeholder geometry;
+  `withTimeout`/`setCrossOriginOnImages` copied from `render-preview.ts` (private
+  there, file outside packet); name-slug only applied to `qr-name` filenames;
+  `preview.pdf` failure is a warning, not fatal; `source/` filename collisions
+  de-duplicated (`-2` suffix). Two bugs found by browser smoke test and fixed:
+  `loadFromJSON` clobbers a pre-set canvas background (engraved sides rendered
+  black — bg now applied post-load; same latent issue exists in `export-pdf.ts`'s
+  `prepareSide`, left alone, proof-only impact), and Fabric's all-or-nothing bulk
+  load meant one dead asset URL rejected the whole export (now object-by-object
+  retry + count warning). P2.b's QR seam: `qrImages` array at the marked line in
+  `exportPrintFiles`.
+- **2026-08-13 (orchestrator):** Existing Playwright baseline is NOT green in this
+  environment: 4 pre-existing failures in `printed-back`/`engrave-only-metal`
+  (verified identical with the P1.b diff stashed) and further env/Supabase-dependent
+  failures elsewhere. Phase gates compare against this baseline rather than
+  requiring an all-green suite.
 - **2026-08-13 (orchestrator):** No `.env` in this environment (only `.env.example`)
   — Playwright specs needing a saved design (`/design/:id`) must stub Supabase via
   Playwright network interception; live-Supabase E2E stays manual.
