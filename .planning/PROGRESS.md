@@ -1,9 +1,10 @@
 # Production Export & QR Automation — Progress
 
-Working tracker for the plans in this directory. Check items off as they land;
-record deviations, discoveries, and blockers under **Notes** so any fresh
-session can resume from this file alone. Branch: `production-export` (do not
-push `main` — it auto-deploys).
+Working tracker for the plans in this directory. The Fable orchestrator checks
+items off as Opus 5 implementer packets land (packet IDs → PLAN-00 "Work
+packets" table); deviations, discoveries, and blockers go under **Notes** so any
+fresh session can resume from this file alone. Branch: `production-export`
+(do not push `main` — it auto-deploys).
 
 ## Deploy checklist (human steps — Pawan)
 
@@ -16,26 +17,27 @@ push `main` — it auto-deploys).
 
 ## Phase 1 — Print-ready export engine (PLAN-01)
 
-- [ ] `src/lib/custom-props.ts` — single `CUSTOM_PROPS`, consumed by save-design / DesignCanvas / export-pdf (fixes `_originalAssetUrl` clobber bug)
-- [ ] `src/lib/download.ts` — extracted `triggerBlobDownload` + zip helpers
-- [ ] `src/lib/export-print.ts` — side renderer (600 DPI, per-side engrave/print matrix, placeholder strip + geometry capture, per-card variable substitution, count rules)
-- [ ] Bundle assembly: `print/`, `source/`, `links.csv`, `preview.pdf`, naming spec
-- [ ] `export-pdf.ts` refactor: `buildDesignPdf()`, proof-only (production pages removed), slug filename
-- [ ] `supabase/functions/generate-pdf/` deleted
-- [ ] UI: DesignPreview — "Download Preview", "Download Print Files" (+ warnings), source-files button removed; ActionBar dialog renamed
-- [ ] Playwright coverage per PLAN-01 testing section
-- [ ] `npm run build` + `lint` + existing suites green
+- [ ] **P1.a** `src/lib/custom-props.ts` — single `CUSTOM_PROPS`, consumed by save-design / DesignCanvas / export-pdf (fixes `_originalAssetUrl` clobber bug)
+- [ ] **P1.a** `export-pdf.ts` refactor: `buildDesignPdf()`, proof-only (production pages removed), slug filename
+- [ ] **P1.b** `src/lib/download.ts` — extracted `triggerBlobDownload` + zip helpers
+- [ ] **P1.b** `src/lib/export-print.ts` — side renderer (600 DPI, per-side engrave/print matrix, placeholder strip + geometry capture, per-card variable substitution, count rules)
+- [ ] **P1.b** Bundle assembly: `print/`, `source/`, `links.csv`, `preview.pdf`, naming spec, `PrintExportResult.files` for PLAN-04
+- [ ] **P1.c** UI: DesignPreview — "Download Preview", "Download Print Files" (+ warnings), source-files button removed; ActionBar dialog renamed
+- [ ] **P1.d** `supabase/functions/generate-pdf/` deleted
+- [ ] **P1.d** Playwright coverage per PLAN-01 testing section
+- [ ] **Gate** `npm run build` + `lint` + existing suites green; phase diff reviewed against PLAN-01
 
 ## Phase 2 — QR + production mode (PLAN-02)
 
-- [ ] `qrcode` dependency added
-- [ ] `src/lib/qr.ts` — generation at print resolution, auto-contrast via luminance sampling, colour rules, `_qrInjected` tagging (never persisted)
-- [ ] `src/lib/production-params.ts` — compact `d`/`r` + `qr=` + `production=1` forms, validation
-- [ ] `src/components/production/ProductionPanel.tsx` — paste box, counters, warnings, live back preview, Download Print Files
-- [ ] `exportPrintFiles` wired to QR assignments + `links.csv` statuses + order-based bundle naming
-- [ ] Playwright coverage per PLAN-02 testing section
+- [ ] **P2.a** `qrcode` dependency added
+- [ ] **P2.a** `src/lib/qr.ts` — generation at print resolution, auto-contrast via luminance sampling, colour rules, `_qrInjected` tagging (never persisted)
+- [ ] **P2.a** `src/lib/production-params.ts` — compact `d`/`r` + `qr=` + `production=1` forms, validation
+- [ ] **P2.b** `src/components/production/ProductionPanel.tsx` — paste box, counters, warnings, live back preview, Download Print Files
+- [ ] **P2.b** `exportPrintFiles` wired to QR assignments + `links.csv` statuses + order-based bundle naming
+- [ ] **P2.c** Playwright coverage per PLAN-02 testing section
+- [ ] **Gate** build/lint/tests green; phase diff reviewed against PLAN-02
 
-## Phase 3 — WordPress handoff (WP repo — skip if repo absent)
+## Phase 3 — WordPress handoff (WP repo — out of scope for the cloud run)
 
 Plan: `swft-nfc-ordering-wp/nfc-ordering/.planning/PLAN-03-wordpress-handoff.md`
 
@@ -47,13 +49,13 @@ Plan: `swft-nfc-ordering-wp/nfc-ordering/.planning/PLAN-03-wordpress-handoff.md`
 
 ## Phase 4 — Google Drive (PLAN-04)
 
-- [ ] CORS spike result recorded in PLAN-04 (blocked without credentials — leave unresolved if so)
-- [ ] `supabase/functions/drive-upload/index.ts` — HMAC auth, token refresh, find-or-create folders, idempotent resumable sessions, house CORS/rate-limit/error patterns
-- [ ] `scripts/get-google-refresh-token.mjs` + `scripts/google-drive-setup.md`
-- [ ] Panel: "Save to Google Drive" (token-gated), sequential uploads behind single `uploadFile()` seam, progress, per-file retry, incomplete-QR confirm
-- [ ] WP write-back call + upload-succeeded-but-writeback-failed fallback UX
-- [ ] Testing per PLAN-04 (local `supabase functions serve` where possible)
+- [ ] CORS spike result recorded in PLAN-04 (needs credentials — leave **unresolved** if unavailable; transport stays behind the `uploadFile()` seam)
+- [ ] **P4.a** `supabase/functions/drive-upload/index.ts` — HMAC auth, token refresh, find-or-create folders, idempotent resumable sessions, house CORS/rate-limit/error patterns
+- [ ] **P4.b** `scripts/get-google-refresh-token.mjs` + `scripts/google-drive-setup.md`
+- [ ] **P4.c** `src/lib/drive.ts` + panel: "Save to Google Drive" (token-gated), sequential uploads behind single `uploadFile()` seam, progress, per-file retry, incomplete-QR confirm
+- [ ] **P4.c** WP write-back call + upload-succeeded-but-writeback-failed fallback UX
+- [ ] **Gate** local verification per PLAN-04 (`supabase functions serve` where possible); E2E deferred to deploy checklist
 
 ## Notes
 
-_(append dated entries here)_
+_(append dated entries here — implementer deviations, plan gaps, spike results)_

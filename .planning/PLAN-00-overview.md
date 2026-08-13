@@ -148,6 +148,113 @@ These five plan files + `CLAUDE.md` are the complete spec — no conversation
 context is required. Decisions in the table above are **final**; do not re-ask
 or re-litigate them.
 
+### Orchestration model: Fable orchestrates, Opus 5 implements
+
+The cloud run is driven by a Fable orchestrator that delegates implementation
+to **Opus 5** agents, one work packet per agent. Implementer agents inherit
+zero context — every brief must be file-based:
+
+- Each packet brief = "Read `CLAUDE.md`, `.planning/PLAN-00-overview.md`
+  (decisions + interface contracts), and the named sections of the phase plan.
+  Implement exactly this packet. Touch only the files it owns."
+- **Gates (orchestrator-enforced):** after every packet `npm run build &&
+  npm run lint`; at each phase end, run the phase's Playwright coverage and
+  review the full phase diff against the plan before starting the next phase;
+  then check the phase off in [PROGRESS.md](PROGRESS.md).
+- **Implementer guardrails:** locked decisions are non-negotiable; no drive-by
+  refactors outside the packet's file list; genuine plan gaps or deviations get
+  a dated entry in PROGRESS.md → Notes (orchestrator resolves them — the plan
+  files themselves are read-only for implementers, except PLAN-04's spike
+  result); injected QR objects are never written to the Zustand store or
+  Supabase; branch `production-export` only.
+
+### Work packets (dependency-ordered; no two concurrent packets share a file)
+
+| Packet | Phase | After | Owns (files) | Scope |
+|---|---|---|---|---|
+| P1.a | 1 | — | `src/lib/custom-props.ts` (new), `src/lib/export-pdf.ts`, `src/lib/save-design.ts`, `src/components/canvas/DesignCanvas.tsx` | CUSTOM_PROPS consolidation (fixes `_originalAssetUrl` clobber); `buildDesignPdf()` refactor; proof-only PDF; slug filename |
+| P1.b | 1 | P1.a | `src/lib/export-print.ts` (new), `src/lib/download.ts` (new) | 600 DPI side renderer, per-side matrix, placeholder strip + geometry, per-card rendering, bundle/naming/`links.csv` |
+| P1.c | 1 | P1.b | `src/components/preview/DesignPreview.tsx`, `src/components/toolbar/ActionBar.tsx` | Button renames, print-files action + warnings, source-files button removal |
+| P1.d | 1 | P1.c | `supabase/functions/generate-pdf/` (delete), `tests/` | Dead-function removal; PLAN-01 Playwright coverage |
+| P2.a | 2 | P1.d | `src/lib/qr.ts` (new), `src/lib/production-params.ts` (new), `package.json` (`qrcode` dep) | QR generation + auto-contrast; param parsing/validation |
+| P2.b | 2 | P2.a | `src/components/production/ProductionPanel.tsx` (new), `src/components/preview/DesignPreview.tsx`, `src/lib/export-print.ts` | Panel UI, live preview, QR-assignment wiring into the bundle |
+| P2.c | 2 | P2.b | `tests/` | PLAN-02 Playwright coverage |
+| P4.a | 4 | P2.c | `supabase/functions/drive-upload/` (new) | Edge function (HMAC, token refresh, folders, resumable sessions) |
+| P4.b | 4 | — (parallel-safe with P4.a) | `scripts/` (new) | OAuth refresh-token script + setup doc |
+| P4.c | 4 | P4.a, P4.b | `src/lib/drive.ts` (new), `src/components/production/ProductionPanel.tsx` | Upload flow behind the `uploadFile()` seam, progress/retry, WP write-back call + fallback UX |
+
+Phase 3 packets live in the WP repo plan and are out of scope for the cloud run.
+
+### Interface contracts (frozen — implementers code to these exactly)
+
+```ts
+// src/lib/export-print.ts  (P1.b defines; P1.c and P2.b consume)
+export interface PrintExportSnapshot {
+  frontCanvasJson: string | null
+  backCanvasJson: string | null
+  frontBgColor: string          // '#ffffff' ⇒ transparent (printed sides)
+  backBgColor: string
+  materialId: string | null
+  variationId: string | null
+  designMethod: DesignMethod    // legacy gate — see PLAN-01
+  backOption: BackOption
+  quantity: number
+  cardData: Record<string, string>[]
+  variableFields: { id: string; label: string }[]
+  designName: string
+}
+export interface QrAssignments {
+  cardUrls: string[]            // index-paired to card rows; may be empty
+  orderRef?: { order: string; item: string; partnerSlug?: string }
+}
+export interface PrintExportResult {
+  blob: Blob                    // the ZIP
+  filename: string
+  warnings: string[]            // user-facing, already worded
+  files: { path: string; blob: Blob }[]  // same content unzipped — P4.c uploads these
+}
+// snapshot omitted ⇒ read store + live canvases (same rule as exportDesignAsPdf)
+export function exportPrintFiles(
+  snapshot?: PrintExportSnapshot,
+  qr?: QrAssignments,
+): Promise<PrintExportResult>
+```
+
+```ts
+// src/lib/qr.ts  (P2.a defines; P1.b's injector consumes via P2.b wiring)
+export interface QrImage { dataUrl: string; sizePx: number }
+export function generateQrImage(url: string, opts: {
+  sizePx: number                // placeholder size × export multiplier
+  dark: string                  // '#000000' | '#FFFFFF'
+  light: string                 // '#FFFFFF' (engraved JPEG) | '#0000' (printed PNG)
+}): Promise<QrImage>
+// < 128 ⇒ dark region ⇒ white QR modules. Samples the mockup-inclusive preview render.
+export function detectQrRegionLuminance(
+  backCanvasJson: string | null, backBgColor: string,
+  variationId: string | null,
+  region: { left: number; top: number; size: number },  // centre-origin, canvas px
+): Promise<number>
+```
+
+```ts
+// src/lib/production-params.ts  (P2.a defines; P2.b + P4.c consume)
+export interface ProductionParams {
+  cardUrls: string[]            // from d+r (compact) or repeated qr=
+  order?: string
+  item?: string
+  partnerSlug?: string
+  exp?: number
+  token?: string                // opaque — relayed, never validated client-side
+  invalid: string[]             // inputs that failed URL parsing (surface, don't drop)
+}
+// null ⇒ no production params present ⇒ render no panel
+export function parseProductionParams(sp: URLSearchParams): ProductionParams | null
+```
+
+The deep-link query contract (`d`, `r`, `order`, `item`, `partner`, `exp`,
+`token`, `qr`, `production`) is specified in PLAN-02 and mirrored by the WP
+side in PLAN-03 §3 — both sides treat it as frozen.
+
 **Work on a feature branch** (e.g. `production-export`), not `main` — pushing
 `main` auto-deploys to production Vercel. Open a PR when a phase is complete.
 Commit style per repo history: conventional lowercase prefixes
