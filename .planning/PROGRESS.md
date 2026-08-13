@@ -22,7 +22,7 @@ fresh session can resume from this file alone. Branch: `production-export`
 - [x] **P1.b** `src/lib/download.ts` — extracted `triggerBlobDownload` + zip helpers
 - [x] **P1.b** `src/lib/export-print.ts` — side renderer (600 DPI, per-side engrave/print matrix, placeholder strip + geometry capture, per-card variable substitution, count rules)
 - [x] **P1.b** Bundle assembly: `print/`, `source/`, `links.csv`, `preview.pdf`, naming spec, `PrintExportResult.files` for PLAN-04
-- [ ] **P1.c** UI: DesignPreview — "Download Preview", "Download Print Files" (+ warnings), source-files button removed; ActionBar dialog renamed
+- [x] **P1.c** UI: DesignPreview — "Download Preview", "Download Print Files" (+ warnings), source-files button removed; ActionBar dialog renamed
 - [ ] **P1.d** `supabase/functions/generate-pdf/` deleted
 - [ ] **P1.d** Playwright coverage per PLAN-01 testing section
 - [ ] **Gate** `npm run build` + `lint` + existing suites green; phase diff reviewed against PLAN-01
@@ -86,6 +86,14 @@ _(append dated entries here — implementer deviations, plan gaps, spike results
   load meant one dead asset URL rejected the whole export (now object-by-object
   retry + count warning). P2.b's QR seam: `qrImages` array at the marked line in
   `exportPrintFiles`.
+- **2026-08-13 (P1.c):** Design mode passes an explicit snapshot to
+  `exportPrintFiles` (shared page must never read live editor canvases), so an
+  empty-named saved design falls back to `nfc-card-print-files.zip` rather than
+  the design-id name — acceptable; add `designId` to `PrintExportSnapshot` later
+  if it matters. Template mode keeps its "Download PDF" label per plan. Dialog
+  description and failure-fallback label in ActionBar still say "PDF" (outside
+  packet scope; fallback works via the refactored wrapper). Print-file warnings
+  persist until the next export (no dismiss control specced).
 - **2026-08-13 (orchestrator):** Existing Playwright baseline is NOT green in this
   environment: 4 pre-existing failures in `printed-back`/`engrave-only-metal`
   (verified identical with the P1.b diff stashed) and further env/Supabase-dependent
