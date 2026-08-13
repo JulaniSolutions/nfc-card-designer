@@ -59,3 +59,10 @@ Plan: `swft-nfc-ordering-wp/nfc-ordering/.planning/PLAN-03-wordpress-handoff.md`
 ## Notes
 
 _(append dated entries here — implementer deviations, plan gaps, spike results)_
+
+- **2026-08-13 (orchestrator):** Baseline `npm run lint` on main already fails with
+  22 errors + 1 warning (new `react-hooks` rules: `refs`/`set-state-in-effect` in
+  `DesignCanvas.tsx`, `ImageUploader`, etc. — predates this work). Lint gate for
+  packets is therefore **zero new problems vs the baseline snapshot**; fixing the
+  pre-existing errors is out of scope (would be a drive-by refactor of files most
+  packets don't own). `npm run build` is clean and stays a hard gate.
