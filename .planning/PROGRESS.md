@@ -23,9 +23,9 @@ fresh session can resume from this file alone. Branch: `production-export`
 - [x] **P1.b** `src/lib/export-print.ts` — side renderer (600 DPI, per-side engrave/print matrix, placeholder strip + geometry capture, per-card variable substitution, count rules)
 - [x] **P1.b** Bundle assembly: `print/`, `source/`, `links.csv`, `preview.pdf`, naming spec, `PrintExportResult.files` for PLAN-04
 - [x] **P1.c** UI: DesignPreview — "Download Preview", "Download Print Files" (+ warnings), source-files button removed; ActionBar dialog renamed
-- [ ] **P1.d** `supabase/functions/generate-pdf/` deleted
-- [ ] **P1.d** Playwright coverage per PLAN-01 testing section
-- [ ] **Gate** `npm run build` + `lint` + existing suites green; phase diff reviewed against PLAN-01
+- [x] **P1.d** `supabase/functions/generate-pdf/` deleted
+- [x] **P1.d** Playwright coverage per PLAN-01 testing section (`tests/print-export.spec.ts`, 6/6 green; in-page harness under `tests/helpers/` — dev-server-only, never built)
+- [x] **Gate** `npm run build` + `lint` at baseline; new spec 6/6; existing suites at recorded baseline (12 pass / 4 pre-existing env failures); phase diff reviewed against PLAN-01
 
 ## Phase 2 — QR + production mode (PLAN-02)
 
