@@ -47,6 +47,7 @@ export async function renderCanvasToImage(
     })
 
     // Load material background image
+    let materialImage: FabricImage | null = null
     if (variationId) {
       const variation = getVariation(variationId)
       const imageSrc = side === 'front' ? variation?.frontImage : variation?.backImage
@@ -60,7 +61,7 @@ export async function renderCanvasToImage(
             })
             fabricImg.scaleToWidth(CARD_WIDTH)
             fabricImg.scaleToHeight(CARD_HEIGHT)
-            tempCanvas.backgroundImage = fabricImg
+            materialImage = fabricImg
             resolve()
           }
           imgEl.onerror = () => resolve()
@@ -75,6 +76,13 @@ export async function renderCanvasToImage(
       // Timeout after 10s — render what we have rather than hanging forever
       await withTimeout(tempCanvas.loadFromJSON(parsed), 10_000)
     }
+
+    // Apply the card body *after* loading: `loadFromJSON` restores canvas-level
+    // properties from the JSON, which carries neither the background colour nor the
+    // material mockup, so anything set beforehand is wiped — leaving every design
+    // with artwork rendering on an empty transparent card.
+    tempCanvas.backgroundColor = bgColor
+    if (materialImage) tempCanvas.backgroundImage = materialImage
     tempCanvas.renderAll()
 
     const dataUrl = tempCanvas.toDataURL({

@@ -55,7 +55,13 @@ function markVariable(obj: FabricObject, layerLabel: string, variableId: string)
   tagged[VARIABLE_ID_PROP] = variableId
 }
 
-function getQrPosition(materialId: string | null, option: BackOption): { left: number; top: number; size: number } {
+/**
+ * Where the QR placeholder sits for a given material and back layout.
+ *
+ * Exported for the print export, which needs the same geometry as a fallback for
+ * designs saved before the placeholder existed.
+ */
+export function getQrPosition(materialId: string | null, option: BackOption): { left: number; top: number; size: number } {
   const size = QR_SIZE
 
   if (isBackEngraved(materialId)) {
@@ -108,30 +114,54 @@ function findAllVariableTexts(canvas: Canvas): FabricObject[] {
   })
 }
 
+/** A dashed transparent Rect — the QR border as it survives serialization. */
+function isGhostQrRect(obj: FabricObject): boolean {
+  return obj instanceof Rect && obj.fill === 'transparent' && !!obj.strokeDashArray?.length
+}
+
+/**
+ * Whether an object is part of the back-card placeholder furniture — either tagged
+ * (current format) or an untagged ghost from an older serialization, which has to
+ * be matched by shape because Fabric drops the custom tags.
+ *
+ * Shared with the print export, which strips the same set from production files.
+ */
+export function isPlaceholderLike(obj: FabricObject): boolean {
+  const custom = obj as FabricObject & Record<string, unknown>
+  // Tagged objects (current format — Group with tag, or individual tagged objects)
+  if (custom[QR_BORDER_TAG] || custom[QR_LABEL_TAG]) return true
+  if (custom._isLocked || custom._isPlaceholder) return true
+  // Ghost QR border: transparent Rect with dashed stroke (from old serialization)
+  if (isGhostQrRect(obj)) return true
+  // Ghost QR label: non-editable Textbox with text "QR Code"
+  if (obj instanceof Textbox && ((obj as Textbox).text === 'QR Code' || (obj as Textbox).text === 'Your QR' || (obj as Textbox).text === 'QR code added\nautomatically') && !(obj as Textbox).editable) return true
+  // Ghost name text (from old serialization before _undeletable was added)
+  if (obj instanceof Textbox && (obj as Textbox).text === 'Your Name Here' && obj.originY === 'center' && obj.left === 60 && !custom._undeletable) return true
+  // Ghost groups (serialized Group objects)
+  if (obj instanceof Group) {
+    const children = obj.getObjects()
+    if (children.some(isGhostQrRect)) return true
+  }
+  return false
+}
+
+/**
+ * Whether an object is specifically the QR placeholder itself — the tagged group or
+ * a ghost carrying its dashed border. Narrower than `isPlaceholderLike`, which also
+ * covers labels and legacy name text, so the print export can read the QR geometry
+ * off the right object.
+ */
+export function isQrPlaceholder(obj: FabricObject): boolean {
+  if ((obj as FabricObject & Record<string, unknown>)[QR_BORDER_TAG]) return true
+  if (isGhostQrRect(obj)) return true
+  return obj instanceof Group && obj.getObjects().some(isGhostQrRect)
+}
+
 /**
  * Remove all placeholder-like objects — both tagged (live) and untagged (ghosts from serialization).
- * Ghosts lose their custom tags when Fabric serializes/deserializes, so we match by shape.
  */
 function removeAllPlaceholders(canvas: Canvas) {
-  const toRemove = canvas.getObjects().filter((obj) => {
-    const custom = obj as FabricObject & Record<string, unknown>
-    // Tagged objects (current format — Group with tag, or individual tagged objects)
-    if (custom[QR_BORDER_TAG] || custom[QR_LABEL_TAG]) return true
-    if (custom._isLocked || custom._isPlaceholder) return true
-    // Ghost QR border: transparent Rect with dashed stroke (from old serialization)
-    if (obj instanceof Rect && obj.fill === 'transparent' && obj.strokeDashArray?.length) return true
-    // Ghost QR label: non-editable Textbox with text "QR Code"
-    if (obj instanceof Textbox && ((obj as Textbox).text === 'QR Code' || (obj as Textbox).text === 'Your QR' || (obj as Textbox).text === 'QR code added\nautomatically') && !(obj as Textbox).editable) return true
-    // Ghost name text (from old serialization before _undeletable was added)
-    if (obj instanceof Textbox && (obj as Textbox).text === 'Your Name Here' && obj.originY === 'center' && obj.left === 60 && !custom._undeletable) return true
-    // Ghost groups (serialized Group objects)
-    if (obj instanceof Group) {
-      const children = obj.getObjects()
-      const hasQrRect = children.some((c) => c instanceof Rect && c.fill === 'transparent' && c.strokeDashArray?.length)
-      if (hasQrRect) return true
-    }
-    return false
-  })
+  const toRemove = canvas.getObjects().filter(isPlaceholderLike)
   for (const obj of toRemove) {
     canvas.remove(obj)
   }

@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Print export harness</title>
+  </head>
+  <body>
+    <!--
+      Test-only page: Playwright loads it to drive src/lib/export-print.ts in a real
+      browser without mounting the designer app (no store side-effects, no draft
+      restore prompt). Served by the Vite dev server only; never built or deployed.
+    -->
+    <script type="module" src="./print-harness.ts"></script>
+  </body>
+</html>

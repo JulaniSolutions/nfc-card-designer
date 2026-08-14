@@ -4,6 +4,7 @@ import { CARD_WIDTH, CARD_HEIGHT, CARD_CORNER_RADIUS } from '@/config/canvas'
 import { useDesignStore, type CardSide } from '@/store/design-store'
 import { getVariation, isFrontEngraved, shouldHideWaveIcon } from '@/config/materials'
 import { cn } from '@/lib/utils'
+import { CUSTOM_PROPS } from '@/lib/custom-props'
 import { LayersPanel } from '@/components/layers/LayersPanel'
 import { MobileAddElements } from '@/components/toolbar/DesignToolbar'
 import { CropActionBar } from '@/components/canvas/CropActionBar'
@@ -28,27 +29,6 @@ function lockTextControls(obj: FabricObject) {
     mtr: true,
   })
 }
-
-// Custom properties to preserve through Fabric.js serialization
-const CUSTOM_PROPS = [
-  '_waveIcon',
-  '_isLocked',
-  '_layerLabel',
-  '_isPlaceholder',
-  '_qrPlaceholderBorder',
-  '_qrPlaceholderLabel',
-  '_backNameText',
-  '_variableId',
-  '_designId',
-  '_isOpaque',
-  '_addedInEngraved',
-  '_originalSrc',
-  '_layerType',
-  '_assetUrl',
-  '_assetName',
-  '_originalAssetUrl',
-  '_undeletable',
-]
 
 // Make selection controls more visible on light backgrounds
 // Larger handles on touch devices for easier grabbing
