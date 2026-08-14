@@ -51,7 +51,7 @@ Plan: `swft-nfc-ordering-wp/nfc-ordering/.planning/PLAN-03-wordpress-handoff.md`
 
 - [ ] CORS spike result recorded in PLAN-04 (needs credentials — leave **unresolved** if unavailable; transport stays behind the `uploadFile()` seam)
 - [ ] **P4.a** `supabase/functions/drive-upload/index.ts` — HMAC auth, token refresh, find-or-create folders, idempotent resumable sessions, house CORS/rate-limit/error patterns
-- [ ] **P4.b** `scripts/get-google-refresh-token.mjs` + `scripts/google-drive-setup.md`
+- [x] **P4.b** `scripts/get-google-refresh-token.mjs` + `scripts/google-drive-setup.md` (script dry-run verified end-to-end incl. a real token-endpoint exchange with dummy creds; no real OAuth possible in this environment)
 - [ ] **P4.c** `src/lib/drive.ts` + panel: "Save to Google Drive" (token-gated), sequential uploads behind single `uploadFile()` seam, progress, per-file retry, incomplete-QR confirm
 - [ ] **P4.c** WP write-back call + upload-succeeded-but-writeback-failed fallback UX
 - [ ] **Gate** local verification per PLAN-04 (`supabase functions serve` where possible); E2E deferred to deploy checklist
