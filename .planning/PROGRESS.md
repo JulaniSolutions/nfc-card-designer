@@ -29,9 +29,9 @@ fresh session can resume from this file alone. Branch: `production-export`
 
 ## Phase 2 — QR + production mode (PLAN-02)
 
-- [ ] **P2.a** `qrcode` dependency added
-- [ ] **P2.a** `src/lib/qr.ts` — generation at print resolution, auto-contrast via luminance sampling, colour rules, `_qrInjected` tagging (never persisted)
-- [ ] **P2.a** `src/lib/production-params.ts` — compact `d`/`r` + `qr=` + `production=1` forms, validation
+- [x] **P2.a** `qrcode` dependency added
+- [x] **P2.a** `src/lib/qr.ts` — generation at print resolution, auto-contrast via luminance sampling, colour rules, `_qrInjected` tagging (never persisted)
+- [x] **P2.a** `src/lib/production-params.ts` — compact `d`/`r` + `qr=` + `production=1` forms, validation
 - [ ] **P2.b** `src/components/production/ProductionPanel.tsx` — paste box, counters, warnings, live back preview, Download Print Files
 - [ ] **P2.b** `exportPrintFiles` wired to QR assignments + `links.csv` statuses + order-based bundle naming
 - [ ] **P2.c** Playwright coverage per PLAN-02 testing section
@@ -94,6 +94,14 @@ _(append dated entries here — implementer deviations, plan gaps, spike results
   description and failure-fallback label in ActionBar still say "PDF" (outside
   packet scope; fallback works via the refactored wrapper). Print-file warnings
   persist until the next export (no dismiss control specced).
+- **2026-08-14 (P2.a):** Additive helpers beyond the frozen `qr.ts` contract:
+  `resolveQrColors(engraved, luminance?)` (single home for the locked colour
+  matrix), `DARK_BODY_LUMINANCE=128`, `isQrUrlOverlong`/`QR_URL_WARN_LENGTH=300`.
+  `production-params.ts` also exports `parseCardUrlLines`, `isCardUrl`,
+  `buildCardUrl` and re-exports export-print's `refFromCardUrl` (one ref
+  implementation; note the re-export pulls fabric/jspdf into importers — fine for
+  current routes). `detectQrRegionLuminance` never throws: render failures resolve
+  to 255 (light ⇒ black modules); transparent pixels composite over white.
 - **2026-08-13 (orchestrator):** Existing Playwright baseline is NOT green in this
   environment: 4 pre-existing failures in `printed-back`/`engrave-only-metal`
   (verified identical with the P1.b diff stashed) and further env/Supabase-dependent

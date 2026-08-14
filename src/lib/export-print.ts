@@ -346,8 +346,13 @@ async function injectQrImage(
   return image
 }
 
-/** The supplier's chip-encoding reference: `/r/<ref>` is the last path segment. */
-function refFromCardUrl(url: string): string {
+/**
+ * The supplier's chip-encoding reference: `/r/<ref>` is the last path segment.
+ *
+ * Exported so the production panel labels rows with the same ref that lands in the
+ * filenames and `links.csv` (re-exported from `production-params.ts`).
+ */
+export function refFromCardUrl(url: string): string {
   try {
     const segments = new URL(url).pathname.split('/').filter(Boolean)
     return segments.length ? decodeURIComponent(segments[segments.length - 1]) : ''
