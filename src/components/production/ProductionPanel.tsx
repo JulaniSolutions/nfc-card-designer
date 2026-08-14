@@ -1,10 +1,29 @@
-import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Check, Loader2, Printer, QrCode, Wrench } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  AlertTriangle,
+  Check,
+  CloudUpload,
+  Copy,
+  ExternalLink,
+  Loader2,
+  Printer,
+  QrCode,
+  RefreshCw,
+  Wrench,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getVariation } from '@/config/materials'
 import { CARD_CORNER_RADIUS } from '@/config/canvas'
 import { isLegacyPrintedMetal, LEGACY_PRINTED_METAL_NOTICE } from '@/lib/design-method'
-import { triggerBlobDownload } from '@/lib/download'
+import { triggerBlobDownload, type BundleFile } from '@/lib/download'
+import {
+  DRIVE_SETUP_DOC,
+  DriveError,
+  postProductionLink,
+  saveBundleToDrive,
+  type DriveSaveResult,
+  type DriveUploadProgress,
+} from '@/lib/drive'
 import {
   backFileCount,
   describeCardUrlIssues,
@@ -51,6 +70,24 @@ interface CardRow {
   unused: boolean
 }
 
+/**
+ * Drive delivery is a small state machine rather than a pair of booleans, because
+ * "paused half-way with files already in Drive" and "finished but WordPress did
+ * not take the link" are both success-ish states the operator has to act on.
+ */
+type DriveState = 'idle' | 'confirm' | 'preparing' | 'uploading' | 'paused' | 'done' | 'error'
+
+/** The built bundle, kept so "Retry remaining" resumes rather than re-renders. */
+interface DriveBundle {
+  folderName: string
+  files: BundleFile[]
+}
+
+/** `print/back-01-aaa111.png` → `back-01-aaa111`, which is what fits in a status line. */
+function fileLabel(path: string): string {
+  return path.split('/').pop()?.replace(/\.[^.]+$/, '') ?? path
+}
+
 export function ProductionPanel({ params, snapshot }: ProductionPanelProps) {
   // Pre-filled from the link, then owned by the operator. `DesignPreview` keys this
   // component on the query string, so arriving at a different order's link remounts
@@ -62,6 +99,14 @@ export function ProductionPanel({ params, snapshot }: ProductionPanelProps) {
   const [exporting, setExporting] = useState(false)
   const [exportWarnings, setExportWarnings] = useState<string[]>([])
   const [exportError, setExportError] = useState<string | null>(null)
+
+  const [driveState, setDriveState] = useState<DriveState>('idle')
+  const [driveProgress, setDriveProgress] = useState<DriveUploadProgress | null>(null)
+  const [driveResult, setDriveResult] = useState<DriveSaveResult | null>(null)
+  const [driveError, setDriveError] = useState<{ message: string; reauth: boolean } | null>(null)
+  const [writeBackRetrying, setWriteBackRetrying] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const bundleRef = useRef<DriveBundle | null>(null)
 
   const { cardUrls } = useMemo(() => parseCardUrlLines(text), [text])
 
@@ -135,6 +180,117 @@ export function ProductionPanel({ params, snapshot }: ProductionPanelProps) {
     }
   }
 
+  // === Google Drive (PLAN-04) ===
+
+  // The token is what authorises the upload and the write-back; without the full
+  // set this is a manual session and the ZIP is the only way out.
+  const canSaveToDrive = Boolean(params.order && params.item && params.token)
+  const driveBusy = driveState === 'preparing' || driveState === 'uploading'
+
+  /** Editing the list invalidates a finished or paused run — that bundle is stale. */
+  const handleTextChange = (value: string) => {
+    setText(value)
+    if (driveBusy) return
+    bundleRef.current = null
+    setDriveState('idle')
+    setDriveProgress(null)
+    setDriveResult(null)
+    setDriveError(null)
+  }
+
+  /**
+   * `only` resumes a paused run: the same bundle, just the files that never
+   * landed. Re-init is safe — the edge function finds the same folder and mints
+   * update sessions.
+   */
+  const runDriveSave = async (only?: string[]) => {
+    if (!params.order || !params.item || !params.token) return
+
+    setDriveError(null)
+    setDriveProgress(null)
+    setDriveState('preparing')
+    try {
+      let bundle = bundleRef.current
+      if (!bundle || !only) {
+        // Same builder as the ZIP button, so Drive and the download can never
+        // carry different files.
+        const result = await exportPrintFiles(snapshot, { cardUrls, orderRef })
+        setExportWarnings(result.warnings)
+        bundle = {
+          folderName: result.filename.replace(/\.zip$/, ''),
+          files: result.files,
+        }
+        bundleRef.current = bundle
+      }
+
+      setDriveState('uploading')
+      const saved = await saveBundleToDrive({
+        context: {
+          order: params.order,
+          item: params.item,
+          exp: params.exp,
+          token: params.token,
+          wpDomain: params.wpDomain,
+        },
+        folderName: bundle.folderName,
+        files: bundle.files,
+        only,
+        onProgress: setDriveProgress,
+      })
+      // A resumed run only reports what *it* sent; the counts the operator reads
+      // are about the whole bundle, so carry the earlier files forward.
+      const alreadyUploaded = only ? (driveResult?.uploaded ?? []) : []
+      setDriveResult({ ...saved, uploaded: [...alreadyUploaded, ...saved.uploaded] })
+      setDriveState(saved.remaining.length > 0 ? 'paused' : 'done')
+    } catch (err) {
+      setDriveError({
+        message: err instanceof Error ? err.message : 'Could not save to Google Drive',
+        reauth: err instanceof DriveError && err.reauthRequired,
+      })
+      setDriveState('error')
+    } finally {
+      setDriveProgress(null)
+    }
+  }
+
+  // Half-assigned QRs are only a warning for the ZIP, but these files go to the
+  // supplier's folder — make the operator say so out loud.
+  const handleDriveClick = () => {
+    if (warnings.length > 0) setDriveState('confirm')
+    else void runDriveSave()
+  }
+
+  /** The files are in Drive; only the order needs telling. Never re-uploads. */
+  const handleRetryWriteBack = async () => {
+    if (!driveResult || !params.order || !params.item || !params.token) return
+    setWriteBackRetrying(true)
+    try {
+      await postProductionLink(params.wpDomain, {
+        order: params.order,
+        item: params.item,
+        exp: params.exp,
+        token: params.token,
+        drive_url: driveResult.folderUrl,
+      })
+      setDriveResult({ ...driveResult, writeBack: 'ok', writeBackError: undefined })
+    } catch (err) {
+      setDriveResult({
+        ...driveResult,
+        writeBack: 'failed',
+        writeBackError: err instanceof Error ? err.message : 'The order could not be updated.',
+      })
+    } finally {
+      setWriteBackRetrying(false)
+    }
+  }
+
+  const handleCopyFolderUrl = async () => {
+    if (!driveResult) return
+    await navigator.clipboard.writeText(driveResult.folderUrl)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   // The card body behind a transparent print PNG, so a white-module QR on black PVC
   // is visible here rather than white-on-white. Engraved backs are opaque JPEGs and
   // cover it anyway.
@@ -181,7 +337,7 @@ export function ProductionPanel({ params, snapshot }: ProductionPanelProps) {
             <textarea
               id="production-card-urls"
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => handleTextChange(e.target.value)}
               spellCheck={false}
               rows={6}
               placeholder="https://app.partner.com/r/ab12cd"
@@ -310,13 +466,34 @@ export function ProductionPanel({ params, snapshot }: ProductionPanelProps) {
         </div>
       )}
 
-      {/* Actions. PLAN-04 (P4.c) mounts "Save to Google Drive" alongside this button,
-          shown only when `params.token` is present. */}
+      {/* Actions. "Save to Google Drive" only exists on a tokened link (PLAN-04);
+          a manual session gets the ZIP and nothing else. */}
       <div className="flex flex-wrap items-center gap-3">
         <Button className="gap-2" disabled={exporting} onClick={handleDownload}>
           {exporting ? <Loader2 className="size-4 animate-spin" /> : <Printer className="size-4" />}
           {exporting ? 'Preparing files...' : 'Download Print Files'}
         </Button>
+
+        {canSaveToDrive && (
+          <Button
+            variant="secondary"
+            className="gap-2"
+            disabled={driveBusy || exporting}
+            onClick={handleDriveClick}
+          >
+            {driveBusy ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <CloudUpload className="size-4" />
+            )}
+            {driveState === 'preparing'
+              ? 'Preparing files...'
+              : driveState === 'uploading'
+                ? 'Uploading...'
+                : 'Save to Google Drive'}
+          </Button>
+        )}
+
         <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
           <QrCode className="size-3.5" />
           {cardUrls.length === 0
@@ -324,6 +501,141 @@ export function ProductionPanel({ params, snapshot }: ProductionPanelProps) {
             : `${cardUrls.length} QR ${cardUrls.length === 1 ? 'code' : 'codes'} will be embedded.`}
         </span>
       </div>
+
+      {/* Drive delivery status. Everything below is component-local — nothing here
+          is written to the store, to Supabase, or back into the design. */}
+      {canSaveToDrive && driveState === 'confirm' && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 space-y-2">
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            These production files still have warnings above. Uploading them puts them in the
+            order’s Drive folder for the supplier to print.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="secondary" onClick={() => void runDriveSave()}>
+              Upload anyway
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setDriveState('idle')}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {canSaveToDrive && driveState === 'preparing' && (
+        <p className="text-xs text-muted-foreground">Rendering print files…</p>
+      )}
+
+      {canSaveToDrive && driveState === 'uploading' && driveProgress && (
+        <p className="text-xs text-muted-foreground">
+          Uploading {fileLabel(driveProgress.name)}… {driveProgress.index}/{driveProgress.total}
+        </p>
+      )}
+
+      {canSaveToDrive && driveState === 'paused' && driveResult && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 space-y-2">
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            Upload paused — {driveResult.uploadError}{' '}
+            {driveResult.uploaded.length} of{' '}
+            {driveResult.uploaded.length + driveResult.remaining.length} files are in Drive;{' '}
+            {driveResult.remaining.length}{' '}
+            {driveResult.remaining.length === 1 ? 'file is' : 'files are'} still to go. Nothing has
+            been written to the order yet.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => void runDriveSave(driveResult.remaining)}
+            >
+              Retry remaining
+            </Button>
+            <a
+              href={driveResult.folderUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground underline underline-offset-2"
+            >
+              <ExternalLink className="size-3" />
+              Open Drive folder
+            </a>
+          </div>
+        </div>
+      )}
+
+      {canSaveToDrive && driveState === 'done' && driveResult && (
+        <div
+          className={cn(
+            'rounded-lg border px-3 py-2 space-y-2',
+            driveResult.writeBack === 'ok'
+              ? 'border-emerald-500/30 bg-emerald-500/10'
+              : 'border-amber-500/30 bg-amber-500/10',
+          )}
+        >
+          <p
+            className={cn(
+              'text-xs',
+              driveResult.writeBack === 'ok'
+                ? 'text-emerald-700 dark:text-emerald-400'
+                : 'text-amber-700 dark:text-amber-400',
+            )}
+          >
+            {driveResult.uploaded.length}{' '}
+            {driveResult.uploaded.length === 1 ? 'file' : 'files'} uploaded to Drive
+            {driveResult.writeBack === 'ok' ? (
+              <> &middot; Saved to order ✓</>
+            ) : (
+              <>
+                {' '}&middot; Couldn’t save to the order — paste it into the order’s proof links
+                manually.{driveResult.writeBackError ? ` (${driveResult.writeBackError})` : ''}
+              </>
+            )}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <a
+              href={driveResult.folderUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-xs font-medium text-foreground underline underline-offset-2"
+            >
+              <ExternalLink className="size-3" />
+              Open Drive folder
+            </a>
+            <Button size="sm" variant="ghost" className="gap-1.5" onClick={handleCopyFolderUrl}>
+              {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+              {copied ? 'Copied' : 'Copy link'}
+            </Button>
+            {driveResult.writeBack !== 'ok' && (
+              <Button
+                size="sm"
+                variant="secondary"
+                className="gap-1.5"
+                disabled={writeBackRetrying}
+                onClick={() => void handleRetryWriteBack()}
+              >
+                {writeBackRetrying ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-3.5" />
+                )}
+                Retry saving to order
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {canSaveToDrive && driveState === 'error' && driveError && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 space-y-1">
+          <p className="text-xs text-destructive">{driveError.message}</p>
+          {driveError.reauth && (
+            <p className="text-xs text-destructive">
+              Google Drive needs re-authorising: re-run the one-time setup in{' '}
+              <span className="font-mono">{DRIVE_SETUP_DOC}</span> to issue a new refresh token,
+              then try again.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   )
 }

@@ -28,6 +28,13 @@ export interface ProductionParams {
   order?: string
   item?: string
   partnerSlug?: string
+  /**
+   * The white-label domain from `d`, normalised (scheme added, no trailing slash).
+   * The link is the only place the app learns which WordPress site minted it, so
+   * this is what the Drive write-back POSTs to (PLAN-04). Absent on manual `qr=`
+   * or `production=1` links — nothing to write back to then.
+   */
+  wpDomain?: string
   exp?: number
   /** Opaque — relayed, never validated client-side. */
   token?: string
@@ -113,6 +120,10 @@ export function parseProductionParams(sp: URLSearchParams): ProductionParams | n
     }
   }
 
+  // Same normalisation as the card URLs, so the write-back and the printed QRs
+  // can never disagree about which site this order belongs to.
+  const wpDomain = domain ? normalizeDomain(domain) : undefined
+
   // Generic form: whole URLs, one per `qr=`.
   candidates.push(...cleanEntries(sp.getAll('qr'), /[\r\n]+/))
 
@@ -125,6 +136,7 @@ export function parseProductionParams(sp: URLSearchParams): ProductionParams | n
   if (item) params.item = item
   const partnerSlug = sp.get('partner')?.trim()
   if (partnerSlug) params.partnerSlug = partnerSlug
+  if (wpDomain) params.wpDomain = wpDomain
   const exp = Number(sp.get('exp'))
   if (sp.get('exp') && Number.isFinite(exp)) params.exp = exp
   const token = sp.get('token')?.trim()

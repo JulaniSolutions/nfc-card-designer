@@ -52,9 +52,9 @@ Plan: `swft-nfc-ordering-wp/nfc-ordering/.planning/PLAN-03-wordpress-handoff.md`
 - [ ] CORS spike result recorded in PLAN-04 (needs credentials — leave **unresolved** if unavailable; transport stays behind the `uploadFile()` seam)
 - [x] **P4.a** `supabase/functions/drive-upload/index.ts` — HMAC auth, token refresh, find-or-create folders, idempotent resumable sessions, house CORS/rate-limit/error patterns (deno check/lint clean; live HTTP smoke test of every auth/validation path; mocked-Google harness proved idempotent re-run, 401-refresh-retry, invalid_grant→409, quota passthrough. NOT verified: anything against real Google, `functions serve/deploy`)
 - [x] **P4.b** `scripts/get-google-refresh-token.mjs` + `scripts/google-drive-setup.md` (script dry-run verified end-to-end incl. a real token-endpoint exchange with dummy creds; no real OAuth possible in this environment)
-- [ ] **P4.c** `src/lib/drive.ts` + panel: "Save to Google Drive" (token-gated), sequential uploads behind single `uploadFile()` seam, progress, per-file retry, incomplete-QR confirm
-- [ ] **P4.c** WP write-back call + upload-succeeded-but-writeback-failed fallback UX
-- [ ] **Gate** local verification per PLAN-04 (`supabase functions serve` where possible); E2E deferred to deploy checklist
+- [x] **P4.c** `src/lib/drive.ts` + panel: "Save to Google Drive" (token-gated), sequential uploads behind single `uploadFile()` seam, progress, per-file retry, incomplete-QR confirm
+- [x] **P4.c** WP write-back call + upload-succeeded-but-writeback-failed fallback UX
+- [x] **Gate** local verification per PLAN-04 done without credentials: edge function exercised via direct `Deno.serve` + mocked-Google harness (no Supabase CLI in env, so `functions serve` itself was impossible); panel flows verified in-browser with all externals route-intercepted (7/7 scenario script); build/lint at baseline; 14/14 print/production specs. E2E + CORS spike remain on the deploy checklist
 
 ## Notes
 
@@ -132,6 +132,18 @@ _(append dated entries here — implementer deviations, plan gaps, spike results
   single-operator reality). ESLint DOES lint `supabase/functions/` — relevant to
   future edge-function work. `supabase/config.toml` has no function registration
   blocks, so none was added.
+- **2026-08-14 (P4.c):** `ProductionParams` gained `wpDomain?` (normalised via the
+  same `normalizeDomain` as card URLs — the panel's only WP-origin source; the `d`
+  param was previously discarded after URL building). Drive folder name derives
+  from `PrintExportResult.filename` minus `.zip` (one naming implementation).
+  Interpretations: paused (partial) uploads skip the WP write-back — a half-filled
+  folder must not land on the order as a proof link; `exp` deliberately not part
+  of the Drive-button gate (PLAN-02 lists order/item/token; a missing `exp`
+  surfaces the function's 400 instead of hiding the button). Hand-built tokened
+  links without `d` can upload but land in write-back-failed with a
+  copy-the-link-manually message (WP-built links always carry `d`). Per-run
+  progress counters; cumulative uploaded count on success. `getEdgeFunctionUrl`
+  copied locally, matching existing duplication in save-design/upload-asset.
 - **2026-08-13 (orchestrator):** Existing Playwright baseline is NOT green in this
   environment: 4 pre-existing failures in `printed-back`/`engrave-only-metal`
   (verified identical with the P1.b diff stashed) and further env/Supabase-dependent
