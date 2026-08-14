@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useDesignStore, type BackOption, type DesignMethod, type VariableField } from '@/store/design-store'
 import { getMaterial, getVariation } from '@/config/materials'
 import { CARD_CORNER_RADIUS } from '@/config/canvas'
@@ -6,8 +7,10 @@ import { renderCanvasToImage } from '@/lib/render-preview'
 import { Loader2, Pencil, FileDown, Printer, Lock, Wand2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { exportDesignAsPdf } from '@/lib/export-pdf'
-import { exportPrintFiles } from '@/lib/export-print'
+import { exportPrintFiles, type PrintExportSnapshot } from '@/lib/export-print'
 import { triggerBlobDownload } from '@/lib/download'
+import { parseProductionParams } from '@/lib/production-params'
+import { ProductionPanel } from '@/components/production/ProductionPanel'
 
 /**
  * Snapshot overrides. When omitted the preview reads the design store, exactly as it
@@ -51,7 +54,8 @@ export function DesignPreview({
   variableFields: variableFieldsProp,
 }: DesignPreviewProps) {
   const store = useDesignStore()
-  const { designName, cardData, quantity } = store
+  const { designName, cardData, quantity, designId } = store
+  const [searchParams] = useSearchParams()
 
   const isTemplate = mode === 'template'
 
@@ -74,6 +78,54 @@ export function DesignPreview({
 
   const material = materialId ? getMaterial(materialId) : null
   const variation = variationId ? getVariation(variationId) : null
+
+  /**
+   * What this page is *showing*, ready for the print export.
+   *
+   * A shared design page is not the editor: passing an explicit snapshot keeps the
+   * export off the live canvases, which belong to whatever the visitor last had
+   * open. Memoised because the production panel re-renders its preview whenever the
+   * snapshot identity changes.
+   */
+  const printSnapshot: PrintExportSnapshot = useMemo(
+    () => ({
+      frontCanvasJson,
+      backCanvasJson,
+      frontBgColor,
+      backBgColor,
+      materialId,
+      variationId,
+      designMethod,
+      backOption,
+      quantity,
+      cardData,
+      variableFields,
+      designName,
+    }),
+    [
+      frontCanvasJson,
+      backCanvasJson,
+      frontBgColor,
+      backBgColor,
+      materialId,
+      variationId,
+      designMethod,
+      backOption,
+      quantity,
+      cardData,
+      variableFields,
+      designName,
+    ],
+  )
+
+  // The production panel is staff-only and stateless: it appears solely when the
+  // deep-link parameters are present, and only for a saved design (never a template,
+  // never an unsaved draft) — there is nothing to hand a supplier otherwise.
+  const searchString = searchParams.toString()
+  const productionParams = useMemo(
+    () => (isTemplate || !designId ? null : parseProductionParams(new URLSearchParams(searchString))),
+    [isTemplate, designId, searchString],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -128,23 +180,7 @@ export function DesignPreview({
     setExportingPrint(true)
     setPrintWarnings([])
     try {
-      // This page shows a *loaded* design, not the editor's: pass the values it is
-      // actually displaying rather than letting the export reach for the live
-      // canvases, which belong to whatever the visitor last had open.
-      const result = await exportPrintFiles({
-        frontCanvasJson,
-        backCanvasJson,
-        frontBgColor,
-        backBgColor,
-        materialId,
-        variationId,
-        designMethod,
-        backOption,
-        quantity,
-        cardData,
-        variableFields,
-        designName,
-      })
+      const result = await exportPrintFiles(printSnapshot)
       triggerBlobDownload(result.blob, result.filename)
       setPrintWarnings(result.warnings)
     } catch (err) {
@@ -283,6 +319,16 @@ export function DesignPreview({
               </p>
             ))}
           </div>
+        )}
+
+        {/* Production panel — hidden unless the deep-link parameters are present */}
+        {productionParams && (
+          <ProductionPanel
+            // Remount on a different link so the paste box refills from the new refs.
+            key={searchString}
+            params={productionParams}
+            snapshot={printSnapshot}
+          />
         )}
 
         {/* Actions */}

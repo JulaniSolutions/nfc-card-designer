@@ -32,8 +32,8 @@ fresh session can resume from this file alone. Branch: `production-export`
 - [x] **P2.a** `qrcode` dependency added
 - [x] **P2.a** `src/lib/qr.ts` — generation at print resolution, auto-contrast via luminance sampling, colour rules, `_qrInjected` tagging (never persisted)
 - [x] **P2.a** `src/lib/production-params.ts` — compact `d`/`r` + `qr=` + `production=1` forms, validation
-- [ ] **P2.b** `src/components/production/ProductionPanel.tsx` — paste box, counters, warnings, live back preview, Download Print Files
-- [ ] **P2.b** `exportPrintFiles` wired to QR assignments + `links.csv` statuses + order-based bundle naming
+- [x] **P2.b** `src/components/production/ProductionPanel.tsx` — paste box, counters, warnings, live back preview, Download Print Files
+- [x] **P2.b** `exportPrintFiles` wired to QR assignments + `links.csv` statuses + order-based bundle naming
 - [ ] **P2.c** Playwright coverage per PLAN-02 testing section
 - [ ] **Gate** build/lint/tests green; phase diff reviewed against PLAN-02
 
@@ -102,6 +102,16 @@ _(append dated entries here — implementer deviations, plan gaps, spike results
   implementation; note the re-export pulls fabric/jspdf into importers — fine for
   current routes). `detectQrRegionLuminance` never throws: render failures resolve
   to 255 (light ⇒ black modules); transparent pixels composite over white.
+- **2026-08-14 (P2.b, orchestrator-approved deviation):** `render-preview.ts` had
+  the same `loadFromJSON`-clobbers-background bug P1.b fixed in `prepareSide` —
+  the shared-page preview lost the material mockup and `detectQrRegionLuminance`
+  read 255 for every design, so auto-contrast always chose black modules. Fixed
+  (background colour + mockup applied post-load); required by the locked "QR
+  contrast: Auto" decision. `renderThumbnail` still carries the identical bug —
+  left for a follow-up, out of scope. Contrast is sampled once per export, not
+  per card; `links.csv` `status` now reflects whether a QR was actually injected;
+  panel live preview reuses the print renderer at multiplier 1 so preview and
+  supplier output cannot drift.
 - **2026-08-13 (orchestrator):** Existing Playwright baseline is NOT green in this
   environment: 4 pre-existing failures in `printed-back`/`engrave-only-metal`
   (verified identical with the P1.b diff stashed) and further env/Supabase-dependent

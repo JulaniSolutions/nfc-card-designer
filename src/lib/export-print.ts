@@ -5,6 +5,14 @@ import { isSideEngraved, type DesignMethod } from '@/config/materials'
 import { useDesignStore, type BackOption, type CardSide } from '@/store/design-store'
 import { getQrPosition, isPlaceholderLike, isQrPlaceholder } from '@/lib/back-card'
 import { isLegacyPrintedMetal } from '@/lib/design-method'
+import {
+  detectQrRegionLuminance,
+  generateQrImage,
+  isQrUrlOverlong,
+  resolveQrColors,
+  QR_URL_WARN_LENGTH,
+  type QrColors,
+} from '@/lib/qr'
 import { buildDesignPdf } from '@/lib/export-pdf'
 import { extractSourceFiles, zipBundle, type BundleFile } from '@/lib/download'
 import { fetchWithTimeout } from '@/lib/fetch-with-timeout'
@@ -16,6 +24,8 @@ import { slugify } from '@/lib/utils'
  * so doubling it lands on 2024 × 1276.
  */
 const EXPORT_MULTIPLIER = 2
+/** The panel's live preview is on screen, not on press — native canvas size is plenty. */
+const PREVIEW_MULTIPLIER = 1
 const JPEG_QUALITY = 0.92
 const LOAD_TIMEOUT_MS = 10_000
 /** Long names would otherwise push filenames past what some ftp/print tools accept. */
@@ -307,15 +317,19 @@ function disposeSide(side: PreparedSide) {
   }
 }
 
+/** One whole-canvas raster, following the per-side format matrix. */
+function renderSideToDataUrl(canvas: Canvas, engraved: boolean, multiplier: number): string {
+  canvas.renderAll()
+  return canvas.toDataURL(
+    engraved
+      ? { format: 'jpeg', quality: JPEG_QUALITY, multiplier, enableRetinaScaling: false }
+      : { format: 'png', multiplier, enableRetinaScaling: false },
+  )
+}
+
 /** One whole-canvas raster at print resolution, as a blob rather than a data URL. */
 function renderSideToBlob(canvas: Canvas, engraved: boolean): Blob {
-  canvas.renderAll()
-  const dataUrl = canvas.toDataURL(
-    engraved
-      ? { format: 'jpeg', quality: JPEG_QUALITY, multiplier: EXPORT_MULTIPLIER, enableRetinaScaling: false }
-      : { format: 'png', multiplier: EXPORT_MULTIPLIER, enableRetinaScaling: false },
-  )
-  return dataUrlToBlob(dataUrl)
+  return dataUrlToBlob(renderSideToDataUrl(canvas, engraved, EXPORT_MULTIPLIER))
 }
 
 /**
@@ -359,6 +373,134 @@ export function refFromCardUrl(url: string): string {
   } catch {
     return ''
   }
+}
+
+/**
+ * How many back files this design produces.
+ *
+ * The designer's quantity is not the order quantity: a `qr-only` design is always a
+ * single card in the editor, so there the QR URL count is what drives the file count.
+ * Exported so the production panel counts cards exactly as the bundle will.
+ */
+export function backFileCount(
+  backOption: BackOption,
+  cardCount: number,
+  cardUrlCount: number,
+): number {
+  return backOption === 'qr-name' ? Math.max(cardCount, 1) : Math.max(cardUrlCount, 1)
+}
+
+/**
+ * How well the supplied card URLs cover the cards — nothing here blocks an export,
+ * printing without QR codes is allowed as long as the operator is told.
+ *
+ * Exported so the production panel can show the same sentences live, before the
+ * bundle exists, rather than keeping a second set of wordings in sync.
+ */
+export function describeQrCoverage(cardUrlCount: number, backCount: number): string[] {
+  if (cardUrlCount === 0) {
+    return [
+      'No QR codes — the placeholder has been left out of the print files. Open this design from the order screen, or paste the card URLs, to embed QR codes.',
+    ]
+  }
+  if (cardUrlCount < backCount) {
+    return [
+      `Only ${cardUrlCount} QR ${cardUrlCount === 1 ? 'code' : 'codes'} for ${backCount} cards — the remaining cards print without a QR code.`,
+    ]
+  }
+  if (cardUrlCount > backCount) {
+    const surplus = cardUrlCount - backCount
+    return [
+      `${cardUrlCount} QR codes for ${backCount} ${backCount === 1 ? 'card' : 'cards'} — ${surplus} surplus ${surplus === 1 ? 'code is' : 'codes are'} unused, and listed in links.csv.`,
+    ]
+  }
+  return []
+}
+
+/**
+ * Problems with the URLs themselves: two cards pointing at one profile, or a link
+ * long enough to make the modules hard to scan. Both are warnings, never blockers —
+ * a WordPress-built link cannot hit either, a hand-pasted list can.
+ */
+export function describeCardUrlIssues(cardUrls: string[]): string[] {
+  const issues: string[] = []
+
+  const seen = new Set<string>()
+  const duplicated: number[] = []
+  cardUrls.forEach((url, index) => {
+    const key = url.trim()
+    if (seen.has(key)) duplicated.push(index + 1)
+    else seen.add(key)
+  })
+  if (duplicated.length) {
+    issues.push(
+      `Two cards share a QR code — ${duplicated.length === 1 ? 'card' : 'cards'} ${duplicated.join(', ')} ${duplicated.length === 1 ? 'repeats' : 'repeat'} a link used earlier in the list. Refs must be unique per card, or those cards open the same profile.`,
+    )
+  }
+
+  const overlong = cardUrls.filter(isQrUrlOverlong).length
+  if (overlong) {
+    issues.push(
+      `${overlong} card ${overlong === 1 ? 'URL is' : 'URLs are'} longer than ${QR_URL_WARN_LENGTH} characters — the QR modules get small, so check one printed sample scans reliably.`,
+    )
+  }
+
+  return issues
+}
+
+/**
+ * Placeholder problems worth telling the operator about before the files go to press.
+ * `found` is false for designs saved before the placeholder existed; clipping only
+ * matters when a QR is actually going onto the file.
+ */
+export function describePlaceholderIssues(
+  geometry: QrGeometry,
+  found: boolean,
+  willInjectQr: boolean,
+): string[] {
+  const issues: string[] = []
+  if (!found) {
+    issues.push(
+      'No QR placeholder was found on the back of this design, so QR codes are placed at the standard position for this material — check the proof before printing.',
+    )
+  }
+  if (!willInjectQr) return issues
+
+  const half = geometry.size / 2
+  const clipped =
+    geometry.left - half < 0 ||
+    geometry.top - half < 0 ||
+    geometry.left + half > CARD_WIDTH ||
+    geometry.top + half > CARD_HEIGHT
+  if (clipped) {
+    issues.push(
+      'The QR placeholder sits partly outside the card, so the QR code will be clipped — edit the design to reposition it.',
+    )
+  }
+  return issues
+}
+
+/**
+ * One QR per card, at the placeholder's print-resolution size.
+ *
+ * The contrast sample is taken **once** for the whole export: the artwork behind the
+ * placeholder is identical on every card, so a per-card sample would be the same
+ * reading paid for N times. Engraved backs skip it entirely — production JPEGs are
+ * black-on-white whatever the finished metal looks like.
+ */
+async function buildQrColors(
+  design: PrintExportSnapshot,
+  geometry: QrGeometry,
+  engraved: boolean,
+): Promise<QrColors> {
+  if (engraved) return resolveQrColors(true)
+  const luminance = await detectQrRegionLuminance(
+    design.backCanvasJson,
+    design.backBgColor,
+    design.variationId,
+    geometry,
+  )
+  return resolveQrColors(false, luminance)
 }
 
 function backFileName(index: number, name: string, ref: string, extension: string): string {
@@ -420,6 +562,74 @@ function uniqueName(name: string, taken: Set<string>): string {
   const unique = `${stem}-${counter}${extension}`
   taken.add(unique)
   return unique
+}
+
+/** The back's per-card text objects, in the order the export substitutes them. */
+function variableTextObjects(objects: FabricObject[]): (Textbox & { _variableId?: string })[] {
+  return objects.filter(
+    (obj) => (obj as FabricObject & { _variableId?: string })._variableId,
+  ) as (Textbox & { _variableId?: string })[]
+}
+
+export interface BackPrintPreview {
+  /** The rendered back, exactly as the bundle would carry it, at screen resolution. */
+  dataUrl: string
+  /** JPEG-on-white rather than a transparent PNG — the caller backs it accordingly. */
+  engraved: boolean
+  /** Whether a QR was actually injected (false when no card URL was supplied). */
+  hasQr: boolean
+  /** Placeholder + artwork-loading warnings for this render. */
+  warnings: string[]
+}
+
+/**
+ * The back print file for one card, at screen resolution — what the production panel
+ * shows so the operator can see the QR land in the placeholder's box.
+ *
+ * Deliberately the *print* render rather than a customer preview: same placeholder
+ * strip, same engraved conversion, same QR colours, just a smaller multiplier. That
+ * way what the panel shows and what the supplier receives cannot drift apart, and
+ * the engraved rules live in exactly one place.
+ *
+ * The injected QR exists only on this offscreen canvas — never on the editor's
+ * canvases, never in the store, never in Supabase.
+ */
+export async function renderBackPrintPreview(
+  design: PrintExportSnapshot,
+  cardUrl?: string | null,
+  cardIndex = 0,
+): Promise<BackPrintPreview> {
+  const legacyPrintedMetal = isLegacyPrintedMetal(design.materialId, design.designMethod)
+  const engraved = !legacyPrintedMetal && isSideEngraved(design.materialId, 'back')
+
+  const back = await prepareSide('back', design.backCanvasJson, design.backBgColor, engraved)
+  try {
+    const warnings = [...back.warnings]
+    const qrGeometry = back.qrGeometry ?? getQrPosition(design.materialId, design.backOption)
+    const url = cardUrl?.trim()
+    warnings.push(...describePlaceholderIssues(qrGeometry, !!back.qrGeometry, !!url))
+
+    const values = design.cardData?.[cardIndex] || {}
+    for (const obj of variableTextObjects(back.objects)) {
+      obj.set('text', values[obj._variableId!] || '')
+    }
+
+    if (url) {
+      const sizePx = Math.max(1, Math.round(qrGeometry.size * EXPORT_MULTIPLIER))
+      const colors = await buildQrColors(design, qrGeometry, engraved)
+      const { dataUrl } = await generateQrImage(url, { sizePx, ...colors })
+      await injectQrImage(back.canvas, { dataUrl }, qrGeometry)
+    }
+
+    return {
+      dataUrl: renderSideToDataUrl(back.canvas, engraved, PREVIEW_MULTIPLIER),
+      engraved,
+      hasQr: !!url,
+      warnings,
+    }
+  } finally {
+    disposeSide(back)
+  }
 }
 
 /**
@@ -493,26 +703,9 @@ export async function exportPrintFiles(
   }
 
   // === Backs — one file per card ===
-  // The designer's quantity is not the order quantity: a `qr-only` design is always
-  // a single card in the editor, so the QR URL count is what drives the file count.
-  const backCount = design.backOption === 'qr-name'
-    ? Math.max(cardData.length, 1)
-    : Math.max(cardUrls.length, 1)
-
-  if (cardUrls.length === 0) {
-    warnings.push(
-      'No QR codes — the placeholder has been left out of the print files. Open this design from the order screen, or paste the card URLs, to embed QR codes.',
-    )
-  } else if (cardUrls.length < backCount) {
-    warnings.push(
-      `Only ${cardUrls.length} QR ${cardUrls.length === 1 ? 'code' : 'codes'} for ${backCount} cards — the remaining cards print without a QR code.`,
-    )
-  } else if (cardUrls.length > backCount) {
-    const surplus = cardUrls.length - backCount
-    warnings.push(
-      `${cardUrls.length} QR codes for ${backCount} ${backCount === 1 ? 'card' : 'cards'} — ${surplus} surplus ${surplus === 1 ? 'code is' : 'codes are'} unused, and listed in links.csv.`,
-    )
-  }
+  const backCount = backFileCount(design.backOption, cardData.length, cardUrls.length)
+  warnings.push(...describeQrCoverage(cardUrls.length, backCount))
+  warnings.push(...describeCardUrlIssues(cardUrls))
 
   const rows: LinkRow[] = []
   const back = await prepareSide('back', design.backCanvasJson, design.backBgColor, backEngraved)
@@ -520,20 +713,38 @@ export async function exportPrintFiles(
     warnings.push(...back.warnings)
 
     const qrGeometry = back.qrGeometry ?? getQrPosition(design.materialId, design.backOption)
-    if (!back.qrGeometry) {
-      warnings.push(
-        'No QR placeholder was found on the back of this design, so QR codes are placed at the standard position for this material — check the proof before printing.',
-      )
+    warnings.push(...describePlaceholderIssues(qrGeometry, !!back.qrGeometry, cardUrls.length > 0))
+
+    // One QR per card, rendered up front at the placeholder's print-resolution size
+    // and injected below. A card with no URL simply prints without one — the
+    // placeholder is stripped either way and the coverage warning above stands.
+    const qrImages: (PrintQrImage | undefined)[] = []
+    if (cardUrls.length) {
+      const sizePx = Math.max(1, Math.round(qrGeometry.size * EXPORT_MULTIPLIER))
+      const colors = await buildQrColors(design, qrGeometry, backEngraved)
+      let failed = 0
+      for (let i = 0; i < backCount; i++) {
+        const cardUrl = cardUrls[i]
+        if (!cardUrl) {
+          qrImages.push(undefined)
+          continue
+        }
+        try {
+          const { dataUrl } = await generateQrImage(cardUrl, { sizePx, ...colors })
+          qrImages.push({ dataUrl })
+        } catch {
+          qrImages.push(undefined)
+          failed++
+        }
+      }
+      if (failed) {
+        warnings.push(
+          `${failed} QR ${failed === 1 ? 'code' : 'codes'} could not be generated, so ${failed === 1 ? 'that card prints' : 'those cards print'} without one — check the card URLs listed in links.csv.`,
+        )
+      }
     }
 
-    // PLAN-02 fills this with one rendered QR per card, generated at `qrGeometry`
-    // and injected below. Until then the placeholder is simply stripped and the
-    // no-QR warning above stands.
-    const qrImages: (PrintQrImage | undefined)[] = []
-
-    const variableObjects = back.objects.filter(
-      (obj) => (obj as FabricObject & { _variableId?: string })._variableId,
-    ) as (Textbox & { _variableId?: string })[]
+    const variableObjects = variableTextObjects(back.objects)
 
     // Sequential: 50 × 2024 × 1276 renders must not hold 50 live canvases
     for (let i = 0; i < backCount; i++) {
@@ -559,7 +770,9 @@ export async function exportPrintFiles(
         ref,
         cardUrl,
         backFile: path,
-        status: cardUrl ? 'ok' : 'no-qr',
+        // What actually landed on the file, not merely what was supplied: a URL whose
+        // QR failed to render must not read as `ok` to the supplier.
+        status: injected ? 'ok' : 'no-qr',
       })
 
       if (injected) back.canvas.remove(injected)
