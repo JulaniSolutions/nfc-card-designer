@@ -50,7 +50,7 @@ Plan: `swft-nfc-ordering-wp/nfc-ordering/.planning/PLAN-03-wordpress-handoff.md`
 ## Phase 4 — Google Drive (PLAN-04)
 
 - [ ] CORS spike result recorded in PLAN-04 (needs credentials — leave **unresolved** if unavailable; transport stays behind the `uploadFile()` seam)
-- [ ] **P4.a** `supabase/functions/drive-upload/index.ts` — HMAC auth, token refresh, find-or-create folders, idempotent resumable sessions, house CORS/rate-limit/error patterns
+- [x] **P4.a** `supabase/functions/drive-upload/index.ts` — HMAC auth, token refresh, find-or-create folders, idempotent resumable sessions, house CORS/rate-limit/error patterns (deno check/lint clean; live HTTP smoke test of every auth/validation path; mocked-Google harness proved idempotent re-run, 401-refresh-retry, invalid_grant→409, quota passthrough. NOT verified: anything against real Google, `functions serve/deploy`)
 - [x] **P4.b** `scripts/get-google-refresh-token.mjs` + `scripts/google-drive-setup.md` (script dry-run verified end-to-end incl. a real token-endpoint exchange with dummy creds; no real OAuth possible in this environment)
 - [ ] **P4.c** `src/lib/drive.ts` + panel: "Save to Google Drive" (token-gated), sequential uploads behind single `uploadFile()` seam, progress, per-file retry, incomplete-QR confirm
 - [ ] **P4.c** WP write-back call + upload-succeeded-but-writeback-failed fallback UX
@@ -120,6 +120,18 @@ _(append dated entries here — implementer deviations, plan gaps, spike results
   "panel never renders on `/template/:id`" — different query chain to stub; the
   guard expression is shared with the covered no-panel case. No product bugs
   found by the Phase 2 suite.
+- **2026-08-14 (P4.a):** Plan-cite correction: `publish-template/index.ts:94` is
+  plain SHA-256, not HMAC — no HMAC existed in the repo; the function follows its
+  hex idiom with `importKey`/`sign` added. Token format assumed **64-char hex**
+  (matches `production-params.ts` docs + PHP `hash_hmac` default) — cross-check
+  when PLAN-03 lands in the WP repo. Additive validation beyond spec: 250-file
+  cap, 200 MB/file, 1 MB body, `print`/`source` path allowlist, duplicate-name
+  rejection. Subfolders created lazily. 409 body carries a human-readable
+  `message` beside the frozen `error` code. Drive find-or-create is not atomic —
+  concurrent first uploads for one order can duplicate a folder (accepted,
+  single-operator reality). ESLint DOES lint `supabase/functions/` — relevant to
+  future edge-function work. `supabase/config.toml` has no function registration
+  blocks, so none was added.
 - **2026-08-13 (orchestrator):** Existing Playwright baseline is NOT green in this
   environment: 4 pre-existing failures in `printed-back`/`engrave-only-metal`
   (verified identical with the P1.b diff stashed) and further env/Supabase-dependent
