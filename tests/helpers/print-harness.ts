@@ -18,6 +18,7 @@ import { getDefaultDesignMethod, type DesignMethod } from '@/config/materials'
 import { CUSTOM_PROPS } from '@/lib/custom-props'
 import { getQrPosition, updateQrPlaceholder, updateVariableTexts } from '@/lib/back-card'
 import { exportPrintFiles, type PrintExportSnapshot, type QrAssignments } from '@/lib/export-print'
+import type { SavedDesign } from '@/lib/save-design'
 import { useDesignStore, type BackOption } from '@/store/design-store'
 
 export interface BuildDesignOptions {
@@ -145,6 +146,40 @@ async function buildSnapshot(opts: BuildDesignOptions): Promise<PrintExportSnaps
   return snapshot
 }
 
+/**
+ * The same design, shaped as the Supabase row `/design/:id` loads.
+ *
+ * PLAN-02's panel only exists on a *saved* design, and this environment has no
+ * Supabase, so the production spec stubs the client module and hands it one of
+ * these. Building it from `buildSnapshot` keeps the seeded row honest: it carries
+ * the real Fabric serialisation, placeholder and all, rather than a hand-written
+ * approximation that could quietly drift from what the editor writes.
+ */
+export function buildDesignRow(designId: string, snapshot: PrintExportSnapshot): SavedDesign {
+  const now = new Date().toISOString()
+  return {
+    id: `row-${designId}`,
+    design_id: designId,
+    name: snapshot.designName,
+    material_id: snapshot.materialId ?? 'plastic',
+    variation_id: snapshot.variationId ?? 'pvc-white',
+    front_canvas_json: snapshot.frontCanvasJson,
+    back_canvas_json: snapshot.backCanvasJson,
+    front_bg_color: snapshot.frontBgColor,
+    back_bg_color: snapshot.backBgColor,
+    design_method: snapshot.designMethod,
+    back_option: snapshot.backOption,
+    // Legacy column, still written by the app alongside `card_data`.
+    card_names: snapshot.cardData.map((row) => row['name'] ?? ''),
+    variable_fields: snapshot.variableFields,
+    card_data: snapshot.cardData,
+    quantity: snapshot.quantity,
+    source_template_id: null,
+    created_at: now,
+    updated_at: now,
+  }
+}
+
 function detectFormat(bytes: Uint8Array): ImageProbe['format'] {
   if (bytes[0] === 0x89 && bytes[1] === 0x50) return 'png'
   if (bytes[0] === 0xff && bytes[1] === 0xd8) return 'jpeg'
@@ -247,6 +282,8 @@ declare global {
     __printHarness?: {
       exportDesign: (opts: BuildDesignOptions, qr?: QrAssignments) => Promise<ExportProbe>
       qrRegion: (materialId: string, backOption: BackOption) => { left: number; top: number; size: number }
+      /** A seeded `designs` row for the production panel's `/design/:id` flow. */
+      designRow: (designId: string, opts: BuildDesignOptions) => Promise<SavedDesign>
     }
   }
 }
@@ -254,4 +291,5 @@ declare global {
 window.__printHarness = {
   exportDesign,
   qrRegion: (materialId, backOption) => getQrPosition(materialId, backOption),
+  designRow: async (designId, opts) => buildDesignRow(designId, await buildSnapshot(opts)),
 }

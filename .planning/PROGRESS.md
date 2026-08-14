@@ -34,8 +34,8 @@ fresh session can resume from this file alone. Branch: `production-export`
 - [x] **P2.a** `src/lib/production-params.ts` — compact `d`/`r` + `qr=` + `production=1` forms, validation
 - [x] **P2.b** `src/components/production/ProductionPanel.tsx` — paste box, counters, warnings, live back preview, Download Print Files
 - [x] **P2.b** `exportPrintFiles` wired to QR assignments + `links.csv` statuses + order-based bundle naming
-- [ ] **P2.c** Playwright coverage per PLAN-02 testing section
-- [ ] **Gate** build/lint/tests green; phase diff reviewed against PLAN-02
+- [x] **P2.c** Playwright coverage per PLAN-02 testing section (`tests/production-panel.spec.ts`, 8 tests; jsQR decode of exported back files proves scannability + contrast rules)
+- [x] **Gate** build/lint at baseline; print-export + production-panel specs 14/14 (verified over multiple runs); existing suites at recorded baseline; phase diff reviewed against PLAN-02
 
 ## Phase 3 — WordPress handoff (WP repo — out of scope for the cloud run)
 
@@ -112,6 +112,14 @@ _(append dated entries here — implementer deviations, plan gaps, spike results
   per card; `links.csv` `status` now reflects whether a QR was actually injected;
   panel live preview reuses the print renderer at multiplier 1 so preview and
   supplier output cannot drift.
+- **2026-08-14 (P2.c):** Supabase is stubbed at the module level (dev-server
+  interception of `/src/lib/supabase.ts`), not the network level — with no `.env`
+  the client is `null` at import time so there is no request to intercept; the
+  stub's export surface must track `supabase.ts` if that file grows. jsQR ships
+  as a UMD `addScriptTag` injection (never in the app import graph). Not covered:
+  "panel never renders on `/template/:id`" — different query chain to stub; the
+  guard expression is shared with the covered no-panel case. No product bugs
+  found by the Phase 2 suite.
 - **2026-08-13 (orchestrator):** Existing Playwright baseline is NOT green in this
   environment: 4 pre-existing failures in `printed-back`/`engrave-only-metal`
   (verified identical with the P1.b diff stashed) and further env/Supabase-dependent
