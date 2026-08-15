@@ -6,6 +6,8 @@
  * Compact (built by WordPress):
  *   ?d=https%3A%2F%2Fapp.partner.com&r=ab12cd,ef34gh
  *   &order=1234&item=567&partner=acme-agency&exp=1765000000&token=<hmac hex>
+ *   [&wp=https%3A%2F%2Fportal.example.com]   ← only when the order site wants
+ *                                              the Drive link posted back
  *
  * Manual / generic:
  *   ?qr=<encoded url>&qr=<encoded url>…
@@ -29,10 +31,17 @@ export interface ProductionParams {
   item?: string
   partnerSlug?: string
   /**
-   * The white-label domain from `d`, normalised (scheme added, no trailing slash).
-   * The link is the only place the app learns which WordPress site minted it, so
-   * this is what the Drive write-back POSTs to (PLAN-04). Absent on manual `qr=`
-   * or `production=1` links — nothing to write back to then.
+   * The ordering portal from `wp`, normalised (scheme added, no trailing slash) —
+   * the WordPress site that minted this link, and the only thing the Drive
+   * write-back may POST to.
+   *
+   * Deliberately **not** sourced from `d`. That is the partner's white-label
+   * *card* domain — where printed QR codes resolve — and is a different server
+   * entirely. Posting there would hand a third party the order ids and the live
+   * upload token, which is exactly what mints Drive sessions.
+   *
+   * Absent unless WordPress sends `wp`, in which case the panel skips the
+   * write-back and the operator copies the folder link onto the order.
    */
   wpDomain?: string
   exp?: number
@@ -120,9 +129,10 @@ export function parseProductionParams(sp: URLSearchParams): ProductionParams | n
     }
   }
 
-  // Same normalisation as the card URLs, so the write-back and the printed QRs
-  // can never disagree about which site this order belongs to.
-  const wpDomain = domain ? normalizeDomain(domain) : undefined
+  // The portal, not the card domain — see `wpDomain` above for why these must
+  // never be conflated. Same normalisation, so a bare host still works.
+  const portal = sp.get('wp')?.trim()
+  const wpDomain = portal ? normalizeDomain(portal) : undefined
 
   // Generic form: whole URLs, one per `qr=`.
   candidates.push(...cleanEntries(sp.getAll('qr'), /[\r\n]+/))

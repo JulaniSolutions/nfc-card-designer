@@ -275,6 +275,14 @@ async function prepareSide(
     }
   }
 
+  // The saved JSON carries the material photo (`/materials/metal-black-front.webp`
+  // and friends) as the canvas background image — that is how the card *looks* in
+  // the editor, not artwork anyone should print or engrave. `loadFromJSON` restores
+  // it along with everything else, and `forceDarkObjects` can't reach it because it
+  // is not in `getObjects()`, so without this the print file ships a full-colour
+  // photograph of brushed metal underneath the engraving.
+  canvas.backgroundImage = undefined
+
   // Set the background *after* loading: `loadFromJSON` restores canvas-level
   // properties from the JSON, so anything set at construction is wiped — which on
   // an engraved side means a black JPEG instead of a white one.
@@ -520,7 +528,14 @@ function bundleName(
   const order = qr?.orderRef?.order
   if (order) {
     const partner = slugify(qr?.orderRef?.partnerSlug ?? '')
-    return partner ? `Order-${order}-${partner}` : `Order-${order}`
+    // The line item, not just the order: two NFC items on one order would
+    // otherwise share a folder, and their `front`/`preview.pdf`/`links.csv` are
+    // identically named — the second upload would quietly replace the first.
+    const item = slugify(qr?.orderRef?.item ?? '')
+    const parts = ['Order', order]
+    if (item) parts.push(`item-${item}`)
+    if (partner) parts.push(partner)
+    return parts.join('-')
   }
   const nameSlug = slugify(designName)
   if (nameSlug) return `${nameSlug}-print-files`

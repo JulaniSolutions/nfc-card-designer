@@ -29,6 +29,8 @@ interface BuildDesignOptions {
   frontText?: string
   frontImageUrl?: string
   frontImageName?: string
+  /** The material photo the editor parks on `canvas.backgroundImage`. */
+  materialImageUrl?: string
 }
 
 interface QrAssignments {
@@ -63,6 +65,7 @@ declare global {
     __printHarness?: {
       exportDesign: (opts: BuildDesignOptions, qr?: QrAssignments) => Promise<ExportProbe>
       qrRegion: (materialId: string, backOption: BackOption) => { left: number; top: number; size: number }
+      parseParams: (search: string) => { cardUrls: string[]; wpDomain?: string } | null
     }
   }
 }
@@ -189,6 +192,70 @@ test.describe('Print bundle', () => {
     expect(probeFor(probe, 'print/back-01.jpg').placeholderInk).toBe(0)
   })
 
+  /**
+   * Every variation the shop sells, exported the way a real saved design arrives:
+   * carrying the material photo on `canvas.backgroundImage`. That photo is how the
+   * card *looks* in the editor, not artwork — `loadFromJSON` restores it and
+   * `forceDarkObjects` can't reach it (it isn't in `getObjects()`), so it has to be
+   * dropped explicitly or every print file ships a photograph of the blank card.
+   *
+   * Print-ready means, per side: engraved ⇒ opaque white JPEG with black artwork;
+   * printed ⇒ fully transparent PNG for the supplier to composite onto the stock.
+   */
+  const VARIATIONS = [
+    { materialId: 'plastic', variationId: 'pvc-white', image: '/materials/pvc-white-front.webp', front: 'printed', back: 'printed' },
+    { materialId: 'plastic', variationId: 'pvc-black', image: '/materials/pvc-black-front.webp', front: 'printed', back: 'printed' },
+    { materialId: 'bamboo', variationId: 'bamboo-natural', image: '/materials/bamboo-front.webp', front: 'printed', back: 'printed' },
+    { materialId: 'metal', variationId: 'metal-black-steel', image: '/materials/metal-black-front.webp', front: 'engraved', back: 'engraved' },
+    { materialId: 'metal', variationId: 'metal-black-gold', image: '/materials/metal-black-front.webp', front: 'engraved', back: 'engraved' },
+    { materialId: 'metal', variationId: 'metal-brushed-silver', image: '/materials/metal-bs-front.webp', front: 'engraved', back: 'engraved' },
+    { materialId: 'hybrid-metal', variationId: 'hybrid-metal-black-steel', image: '/materials/hybridmetal-black-front.webp', front: 'engraved', back: 'printed' },
+    { materialId: '24k-gold', variationId: '24k-gold', image: '/materials/24kgold-front.webp', front: 'engraved', back: 'printed' },
+  ] as const
+
+  for (const variation of VARIATIONS) {
+    test(`${variation.variationId} exports print-ready files`, async ({ page }) => {
+      await openHarness(page)
+
+      const probe = await exportDesign(page, {
+        materialId: variation.materialId,
+        variationId: variation.variationId,
+        backOption: 'qr-only',
+        cardData: [{ name: '' }],
+        designName: `${variation.variationId} print ready`,
+        frontText: 'ACME',
+        materialImageUrl: variation.image,
+      })
+
+      const expectSide = (path: string, method: 'engraved' | 'printed') => {
+        const image = probeFor(probe, path)
+        expect({ width: image.width, height: image.height }, path)
+          .toEqual({ width: PRINT_WIDTH, height: PRINT_HEIGHT })
+
+        const [r, g, b, a] = image.corner
+        if (method === 'engraved') {
+          // Opaque white ground. The material photos are all mid-to-dark, so a
+          // white corner is what proves the photo was dropped.
+          expect({ format: image.format, white: r > 245 && g > 245 && b > 245, alpha: a }, path)
+            .toEqual({ format: 'jpeg', white: true, alpha: 255 })
+        } else {
+          // Transparent, so the supplier composites onto the real stock. A leaked
+          // photo shows up here as alpha 255.
+          expect({ format: image.format, alpha: a }, path).toEqual({ format: 'png', alpha: 0 })
+        }
+      }
+
+      const frontExt = variation.front === 'engraved' ? 'jpg' : 'png'
+      const backExt = variation.back === 'engraved' ? 'jpg' : 'png'
+      expectSide(`print/front.${frontExt}`, variation.front)
+      expectSide(`print/back-01.${backExt}`, variation.back)
+
+      // The opposite failure: dropping the artwork along with the photo.
+      expect(probeFor(probe, `print/front.${frontExt}`).ink).toBeGreaterThan(0)
+      expect(probeFor(probe, `print/back-01.${backExt}`).placeholderInk).toBe(0)
+    })
+  }
+
   test('hybrid metal engraves the front and prints the back', async ({ page }) => {
     await openHarness(page)
 
@@ -301,7 +368,9 @@ test.describe('Print bundle', () => {
       'print/front.png',
     ])
     // Order context names the bundle so it lands in the right Drive folder.
-    expect(probe.zipFilename).toBe('Order-1042-acme-partners.zip')
+    // The line item is in the name: two NFC items on one order must not share a
+    // Drive folder, or the second overwrites the first's front/preview/csv.
+    expect(probe.zipFilename).toBe('Order-1042-item-7-acme-partners.zip')
 
     const csv = probe.linksCsv.trim().split('\n')
     expect(csv).toEqual([
@@ -309,5 +378,35 @@ test.describe('Print bundle', () => {
       '1,,AAA111,https://tap.example.com/r/AAA111,print/back-01-AAA111.png,ok',
       '2,,BBB222,https://tap.example.com/r/BBB222,print/back-02-BBB222.png,ok',
     ])
+  })
+})
+
+/**
+ * The two domains on a production link do different jobs and must never be
+ * confused: `d` is the partner's white-label *card* domain (where printed QR
+ * codes resolve), `wp` is the ordering portal. The Drive write-back POSTs the
+ * order ids and the live upload token, so sending it to `d` would hand a third
+ * party the credential that mints Drive sessions.
+ */
+test.describe('Production link domains', () => {
+  const parse = (page: Page, search: string) =>
+    page.evaluate((s) => window.__printHarness!.parseParams(s), search)
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/tests/helpers/print-harness.html')
+    await page.waitForFunction(() => !!window.__printHarness)
+  })
+
+  test('the card domain is never used as a write-back target', async ({ page }) => {
+    const params = await parse(page, '?d=app.partner.com&r=aaa111&order=99&item=7')
+    expect(params?.cardUrls).toEqual(['https://app.partner.com/r/aaa111'])
+    // Card URLs still built from `d` — but nothing to post to.
+    expect(params?.wpDomain).toBeUndefined()
+  })
+
+  test('the portal comes from wp, normalised', async ({ page }) => {
+    const params = await parse(page, '?d=app.partner.com&r=aaa111&wp=portal.example.com/')
+    expect(params?.wpDomain).toBe('https://portal.example.com')
+    expect(params?.cardUrls).toEqual(['https://app.partner.com/r/aaa111'])
   })
 })

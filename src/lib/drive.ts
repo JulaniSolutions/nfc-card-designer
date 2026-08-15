@@ -299,13 +299,9 @@ export async function uploadFiles(
  * because the files are already safely in Drive by this point.
  */
 export async function postProductionLink(
-  wpDomain: string | undefined,
+  wpDomain: string,
   payload: { order: string; item: string; exp?: number; token: string; drive_url: string },
 ): Promise<void> {
-  if (!wpDomain) {
-    throw new Error('This link carries no partner domain, so the order could not be updated.')
-  }
-
   let res: Response
   try {
     res = await fetchWithTimeout(
@@ -386,6 +382,13 @@ export async function saveBundleToDrive(request: DriveSaveRequest): Promise<Driv
   // A half-uploaded folder is not a proof link — don't put it on the order.
   if (outcome.remaining.length > 0) {
     return { ...base, uploadError: outcome.error, writeBack: 'skipped' }
+  }
+
+  // No portal on the link means nobody asked for a write-back — the operator
+  // copies the folder link onto the order. That is a finished job, not a failure,
+  // so it must not surface as one.
+  if (!context.wpDomain) {
+    return { ...base, writeBack: 'skipped' }
   }
 
   try {

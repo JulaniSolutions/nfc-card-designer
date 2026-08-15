@@ -262,7 +262,7 @@ export function ProductionPanel({ params, snapshot }: ProductionPanelProps) {
 
   /** The files are in Drive; only the order needs telling. Never re-uploads. */
   const handleRetryWriteBack = async () => {
-    if (!driveResult || !params.order || !params.item || !params.token) return
+    if (!driveResult || !params.order || !params.item || !params.token || !params.wpDomain) return
     setWriteBackRetrying(true)
     try {
       await postProductionLink(params.wpDomain, {
@@ -566,24 +566,28 @@ export function ProductionPanel({ params, snapshot }: ProductionPanelProps) {
         <div
           className={cn(
             'rounded-lg border px-3 py-2 space-y-2',
-            driveResult.writeBack === 'ok'
-              ? 'border-emerald-500/30 bg-emerald-500/10'
-              : 'border-amber-500/30 bg-amber-500/10',
+            // Only a genuine write-back *failure* is amber. A link that never asked
+            // for one did its whole job, so it reads as success.
+            driveResult.writeBack === 'failed'
+              ? 'border-amber-500/30 bg-amber-500/10'
+              : 'border-emerald-500/30 bg-emerald-500/10',
           )}
         >
           <p
             className={cn(
               'text-xs',
-              driveResult.writeBack === 'ok'
-                ? 'text-emerald-700 dark:text-emerald-400'
-                : 'text-amber-700 dark:text-amber-400',
+              driveResult.writeBack === 'failed'
+                ? 'text-amber-700 dark:text-amber-400'
+                : 'text-emerald-700 dark:text-emerald-400',
             )}
           >
             {driveResult.uploaded.length}{' '}
             {driveResult.uploaded.length === 1 ? 'file' : 'files'} uploaded to Drive
-            {driveResult.writeBack === 'ok' ? (
-              <> &middot; Saved to order ✓</>
-            ) : (
+            {driveResult.writeBack === 'ok' && <> &middot; Saved to order ✓</>}
+            {driveResult.writeBack === 'skipped' && (
+              <> &middot; copy the link below into the order’s proof links.</>
+            )}
+            {driveResult.writeBack === 'failed' && (
               <>
                 {' '}&middot; Couldn’t save to the order — paste it into the order’s proof links
                 manually.{driveResult.writeBackError ? ` (${driveResult.writeBackError})` : ''}
@@ -604,7 +608,7 @@ export function ProductionPanel({ params, snapshot }: ProductionPanelProps) {
               {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
               {copied ? 'Copied' : 'Copy link'}
             </Button>
-            {driveResult.writeBack !== 'ok' && (
+            {driveResult.writeBack === 'failed' && (
               <Button
                 size="sm"
                 variant="secondary"

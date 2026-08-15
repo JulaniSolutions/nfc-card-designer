@@ -18,6 +18,7 @@ import { getDefaultDesignMethod, type DesignMethod } from '@/config/materials'
 import { CUSTOM_PROPS } from '@/lib/custom-props'
 import { getQrPosition, updateQrPlaceholder, updateVariableTexts } from '@/lib/back-card'
 import { exportPrintFiles, type PrintExportSnapshot, type QrAssignments } from '@/lib/export-print'
+import { parseProductionParams, type ProductionParams } from '@/lib/production-params'
 import type { SavedDesign } from '@/lib/save-design'
 import { useDesignStore, type BackOption } from '@/store/design-store'
 
@@ -35,6 +36,12 @@ export interface BuildDesignOptions {
   /** Stands in for an uploaded asset (same-origin, so `source/` can be exercised offline). */
   frontImageUrl?: string
   frontImageName?: string
+  /**
+   * The material photo the editor parks on `canvas.backgroundImage` (see
+   * `DesignCanvas.tsx`). Real saved designs always carry one; the export has to
+   * drop it, so a fixture without it can't prove anything.
+   */
+  materialImageUrl?: string
 }
 
 export interface ImageProbe {
@@ -121,6 +128,19 @@ async function buildSnapshot(opts: BuildDesignOptions): Promise<PrintExportSnaps
   }
 
   const back = newCanvas()
+  if (opts.materialImageUrl) {
+    // Both sides, the way the editor applies it — front and back each get one.
+    for (const target of [front.canvas, back.canvas]) {
+      const material = await FabricImage.fromURL(opts.materialImageUrl, { crossOrigin: 'anonymous' })
+      material.set({
+        originX: 'left',
+        originY: 'top',
+        scaleX: CARD_WIDTH / (material.width || CARD_WIDTH),
+        scaleY: CARD_HEIGHT / (material.height || CARD_HEIGHT),
+      })
+      target.backgroundImage = material
+    }
+  }
   updateQrPlaceholder(back.canvas)
   if (opts.backOption === 'qr-name') {
     updateVariableTexts(back.canvas, [NAME_FIELD], opts.cardData)
@@ -284,6 +304,8 @@ declare global {
       qrRegion: (materialId: string, backOption: BackOption) => { left: number; top: number; size: number }
       /** A seeded `designs` row for the production panel's `/design/:id` flow. */
       designRow: (designId: string, opts: BuildDesignOptions) => Promise<SavedDesign>
+      /** Parse a production query string, for asserting the link contract directly. */
+      parseParams: (search: string) => ProductionParams | null
     }
   }
 }
@@ -292,4 +314,5 @@ window.__printHarness = {
   exportDesign,
   qrRegion: (materialId, backOption) => getQrPosition(materialId, backOption),
   designRow: async (designId, opts) => buildDesignRow(designId, await buildSnapshot(opts)),
+  parseParams: (search) => parseProductionParams(new URLSearchParams(search)),
 }
