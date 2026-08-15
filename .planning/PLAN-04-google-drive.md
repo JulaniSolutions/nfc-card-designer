@@ -48,6 +48,30 @@ edge function one file per request (PNG ~1–3 MB each, within limits; slower,
 still correct). The panel code should isolate the transport behind one
 `uploadFile(session, blob, onProgress)` function so the fallback is a swap.
 
+**RESULT — CORS: works.** Verified 2026-08-15 against real Google credentials on
+the deployed app (`https://nfcdesigner.com`). The direct browser `PUT` is
+allowed cross-origin exactly as predicted; the proxy fallback is **not** needed
+and `uploadFile()` stays as the direct XHR `PUT` (`src/lib/drive.ts:175`).
+
+Spike detail, for anyone re-verifying:
+
+- Link: design `wzdaakaf` (bamboo-natural, printed, `qr-name`) opened with
+  `?production=1&order=1&item=1&exp=…&token=…&qr=…`, token minted by hand with
+  `openssl dgst -sha256 -hmac` over `1.1.<exp>` (WordPress not built yet).
+- Panel rendered with the QR in the live back preview; "Save to Google Drive"
+  reported **4 files uploaded**, all four confirmed present in
+  `pawan@swftconnect.com`'s Drive: `print/front.png` (2.32 MB),
+  `print/back-01-mecontact-test01.png` (2.25 MB), `links.csv` (127 B),
+  `preview.pdf` (31.9 KB). Multi-MB payloads went through the direct path
+  without trouble, so the Supabase body limit never becomes the ceiling.
+- Root folder `NFC Card Production` was auto-created by the app on first upload,
+  as the `drive.file` scope requires.
+- The WordPress write-back failed as expected — a manual `qr=` link carries no
+  partner domain, so `postProductionLink` threw and the panel showed the
+  non-blocking "paste it into the order's proof links manually" fallback with a
+  "Retry saving to order" button. Not a defect; Phase 3 is unbuilt. This path
+  stays **unverified against a real WordPress endpoint** until Phase 3 ships.
+
 ## Edge function: `supabase/functions/drive-upload/index.ts`
 
 Follow the house pattern exactly (see recon: copy the skeleton from

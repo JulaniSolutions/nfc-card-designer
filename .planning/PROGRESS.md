@@ -8,11 +8,11 @@ fresh session can resume from this file alone. Branch: `production-export`
 
 ## Deploy checklist (human steps — Pawan)
 
-- [ ] Generate shared secret → WP setting `designer_shared_secret` + `supabase secrets set DESIGNER_SHARED_SECRET=…`
-- [ ] GCP project + OAuth client → run `scripts/get-google-refresh-token.mjs` → `supabase secrets set GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET/GOOGLE_REFRESH_TOKEN`
-- [ ] `supabase functions deploy drive-upload` (and redeploy any edited functions)
+- [~] Generate shared secret → WP setting `designer_shared_secret` + `supabase secrets set DESIGNER_SHARED_SECRET=…` — **Supabase half done** (2026-08-15); WP setting waits on Phase 3, and must be byte-identical to the value in Pawan's password manager
+- [x] GCP project + OAuth client → run `scripts/get-google-refresh-token.mjs` → `supabase secrets set GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET/GOOGLE_REFRESH_TOKEN` (2026-08-15)
+- [x] `supabase functions deploy drive-upload` (and redeploy any edited functions) — deployed to `famovvbpdilqbsbyduti` 2026-08-15; bogus-token checkpoint returned the expected 403 "Invalid token."
 - [ ] Deploy WP plugin update (version bump) to the partner portal
-- [ ] Run the PLAN-04 CORS spike with real credentials; record result in PLAN-04
+- [x] Run the PLAN-04 CORS spike with real credentials; record result in PLAN-04 — **CORS works**, direct browser PUT confirmed, no proxy fallback needed (2026-08-15)
 - [ ] Physical QR scan test: one printed sample (pvc-black, white QR) + one engraved metal sample
 
 ## Phase 1 — Print-ready export engine (PLAN-01)
@@ -49,7 +49,7 @@ Plan: `swft-nfc-ordering-wp/nfc-ordering/.planning/PLAN-03-wordpress-handoff.md`
 
 ## Phase 4 — Google Drive (PLAN-04)
 
-- [ ] CORS spike result recorded in PLAN-04 (needs credentials — leave **unresolved** if unavailable; transport stays behind the `uploadFile()` seam)
+- [x] CORS spike result recorded in PLAN-04 — resolved 2026-08-15: **works**, transport stays the direct XHR `PUT` behind the `uploadFile()` seam
 - [x] **P4.a** `supabase/functions/drive-upload/index.ts` — HMAC auth, token refresh, find-or-create folders, idempotent resumable sessions, house CORS/rate-limit/error patterns (deno check/lint clean; live HTTP smoke test of every auth/validation path; mocked-Google harness proved idempotent re-run, 401-refresh-retry, invalid_grant→409, quota passthrough. NOT verified: anything against real Google, `functions serve/deploy`)
 - [x] **P4.b** `scripts/get-google-refresh-token.mjs` + `scripts/google-drive-setup.md` (script dry-run verified end-to-end incl. a real token-endpoint exchange with dummy creds; no real OAuth possible in this environment)
 - [x] **P4.c** `src/lib/drive.ts` + panel: "Save to Google Drive" (token-gated), sequential uploads behind single `uploadFile()` seam, progress, per-file retry, incomplete-QR confirm
@@ -59,6 +59,36 @@ Plan: `swft-nfc-ordering-wp/nfc-ordering/.planning/PLAN-03-wordpress-handoff.md`
 ## Notes
 
 _(append dated entries here — implementer deviations, plan gaps, spike results)_
+
+**2026-08-15 — Google Drive delivery verified end to end (deploy checklist steps 1–3 + CORS spike).**
+Secrets set and `drive-upload` deployed to `famovvbpdilqbsbyduti`; the bogus-token
+curl returned 403 "Invalid token." (function live, secrets loaded, HMAC path
+reached) and its `access-control-allow-origin: https://nfcdesigner.com` header
+confirmed `APP_ORIGIN`.
+
+The CORS spike then passed on the real deployed app — full detail in PLAN-04's
+"Opening spike" section. Four files landed in Drive from a direct browser `PUT`,
+so **the proxy fallback is not needed** and `src/lib/drive.ts` is unchanged.
+
+Still open, and deliberately so:
+
+- **WordPress write-back is unverified.** It can only be exercised once Phase 3
+  ships; the manual `qr=` link has no partner domain, so the spike could only
+  confirm the failure path degrades gracefully (folder link + copy button +
+  retry, upload still intact).
+- **Physical QR scan test** not started — needs printed samples.
+- Only a **printed** (bamboo) design was exercised. The engraved-metal path
+  through `exportPrintFiles` is covered by the Playwright suite but has not been
+  through a real Drive upload; worth one run when a metal order comes through.
+
+Also closed manually on 2026-08-15: the P2.c gap "panel never renders on
+`/template/:id`". Loaded template `3tpniogz` on production with a **valid**
+token and the full production query string — the page rendered only "Use this
+template" and "Download PDF", with no panel, no QR and no Drive button, as the
+`isTemplate || !designId` guard at `DesignPreview.tsx:126` intends. Still no
+automated coverage, but the deployed behaviour is confirmed. Note the failure is
+silent: an operator who somehow lands on a template link with production params
+sees no panel and no explanation.
 
 - **2026-08-13 (orchestrator):** Baseline `npm run lint` on main already fails with
   22 errors + 1 warning (new `react-hooks` rules: `refs`/`set-state-in-effect` in
