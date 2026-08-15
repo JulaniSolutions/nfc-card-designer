@@ -127,6 +127,14 @@ export function DesignPreview({
     [isTemplate, designId, searchString],
   )
 
+  // Template links get pasted into orders in place of design links. Detect that
+  // exact mistake — same parser, so the two can never disagree about what counts
+  // as a production link — and explain it instead of rendering an ordinary page.
+  const productionParamsOnTemplate = useMemo(
+    () => isTemplate && parseProductionParams(new URLSearchParams(searchString)) !== null,
+    [isTemplate, searchString],
+  )
+
   useEffect(() => {
     let cancelled = false
 
@@ -321,6 +329,17 @@ export function DesignPreview({
           </div>
         )}
 
+        {productionParamsOnTemplate && (
+          <div className="max-w-xl mx-auto rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5">
+            <p className="text-xs text-amber-700 dark:text-amber-400 text-center">
+              This is a <span className="font-medium">template</span> link, so there are no
+              production files to prepare — a template carries no card details and belongs to no
+              order. Open the customer&rsquo;s design link (
+              <span className="font-mono">/design/…</span>) from the order instead.
+            </p>
+          </div>
+        )}
+
         {/* Production panel — hidden unless the deep-link parameters are present */}
         {productionParams && (
           <ProductionPanel
@@ -367,6 +386,17 @@ export function DesignPreview({
             </>
           )}
         </div>
+
+        {/* Said on every template page, not only when a production link arrives: this
+            page's URL is the one people copy out of the address bar and send in when
+            they mean to order. */}
+        {isTemplate && (
+          <p className="max-w-xl mx-auto text-xs text-muted-foreground text-center">
+            Ordering cards? Don&rsquo;t send us this template link &mdash; it carries no card
+            details. Choose <span className="font-medium text-foreground">Use this template</span>,
+            add your details, then save your design and send us that link instead.
+          </p>
+        )}
       </div>
     </div>
   )
