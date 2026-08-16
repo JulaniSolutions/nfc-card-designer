@@ -586,15 +586,53 @@ function variableTextObjects(objects: FabricObject[]): (Textbox & { _variableId?
   ) as (Textbox & { _variableId?: string })[]
 }
 
-export interface BackPrintPreview {
-  /** The rendered back, exactly as the bundle would carry it, at screen resolution. */
+export interface SidePrintPreview {
+  /** The rendered side, exactly as the bundle would carry it, at screen resolution. */
   dataUrl: string
   /** JPEG-on-white rather than a transparent PNG — the caller backs it accordingly. */
   engraved: boolean
+  /** Artwork-loading warnings for this render. */
+  warnings: string[]
+}
+
+export interface BackPrintPreview extends SidePrintPreview {
   /** Whether a QR was actually injected (false when no card URL was supplied). */
   hasQr: boolean
-  /** Placeholder + artwork-loading warnings for this render. */
-  warnings: string[]
+}
+
+/**
+ * Whether a side rasters as engraved artwork, following the same legacy gate the
+ * bundle uses — so a preview can never disagree with the file it is previewing.
+ */
+function previewEngraved(design: PrintExportSnapshot, side: CardSide): boolean {
+  return (
+    !isLegacyPrintedMetal(design.materialId, design.designMethod) &&
+    isSideEngraved(design.materialId, side)
+  )
+}
+
+/**
+ * The front print file at screen resolution — the design's single front raster,
+ * shared by every card in the order.
+ *
+ * Carries no QR and no per-card text: everything variable lives on the back, so this
+ * only changes when the design does.
+ */
+export async function renderFrontPrintPreview(
+  design: PrintExportSnapshot,
+): Promise<SidePrintPreview> {
+  const engraved = previewEngraved(design, 'front')
+
+  const front = await prepareSide('front', design.frontCanvasJson, design.frontBgColor, engraved)
+  try {
+    return {
+      dataUrl: renderSideToDataUrl(front.canvas, engraved, PREVIEW_MULTIPLIER),
+      engraved,
+      warnings: [...front.warnings],
+    }
+  } finally {
+    disposeSide(front)
+  }
 }
 
 /**
@@ -614,8 +652,7 @@ export async function renderBackPrintPreview(
   cardUrl?: string | null,
   cardIndex = 0,
 ): Promise<BackPrintPreview> {
-  const legacyPrintedMetal = isLegacyPrintedMetal(design.materialId, design.designMethod)
-  const engraved = !legacyPrintedMetal && isSideEngraved(design.materialId, 'back')
+  const engraved = previewEngraved(design, 'back')
 
   const back = await prepareSide('back', design.backCanvasJson, design.backBgColor, engraved)
   try {

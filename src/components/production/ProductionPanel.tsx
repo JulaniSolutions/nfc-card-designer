@@ -31,8 +31,10 @@ import {
   exportPrintFiles,
   refFromCardUrl,
   renderBackPrintPreview,
+  renderFrontPrintPreview,
   type BackPrintPreview,
   type PrintExportSnapshot,
+  type SidePrintPreview,
 } from '@/lib/export-print'
 import { isCardUrl, parseCardUrlLines, type ProductionParams } from '@/lib/production-params'
 import { cn } from '@/lib/utils'
@@ -88,14 +90,65 @@ function fileLabel(path: string): string {
   return path.split('/').pop()?.replace(/\.[^.]+$/, '') ?? path
 }
 
+interface PrintFilePreviewProps {
+  label: string
+  alt: string
+  /**
+   * The card body photo, shown *behind* the render. Print files carry artwork only,
+   * so a white-on-transparent design would otherwise be invisible here — and the
+   * operator would be checking a blank box.
+   */
+  cardImage?: string
+  preview: SidePrintPreview | null
+  loading: boolean
+  caption: string
+}
+
+/** One side's print render, framed at card proportions with its own status line. */
+function PrintFilePreview({ label, alt, cardImage, preview, loading, caption }: PrintFilePreviewProps) {
+  return (
+    <div className="space-y-2">
+      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      <div
+        className="relative w-full overflow-hidden border border-border bg-muted"
+        style={{
+          borderRadius: CARD_CORNER_RADIUS,
+          aspectRatio: '1012 / 638',
+          backgroundImage: cardImage ? `url(${cardImage})` : undefined,
+          backgroundSize: 'cover',
+        }}
+      >
+        {preview && <img src={preview.dataUrl} alt={alt} className="w-full" />}
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/40">
+            <Loader2 className="size-4 animate-spin text-muted-foreground" />
+          </div>
+        )}
+      </div>
+      <div className="space-y-1">
+        <p className="text-[11px] leading-4 text-muted-foreground">{caption}</p>
+        {preview?.warnings.map((warning, i) => (
+          <p key={i} className="text-[11px] leading-4 text-amber-700 dark:text-amber-400">
+            {warning}
+          </p>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function ProductionPanel({ params, snapshot }: ProductionPanelProps) {
   // Pre-filled from the link, then owned by the operator. `DesignPreview` keys this
   // component on the query string, so arriving at a different order's link remounts
   // the panel and refills the box rather than needing a sync effect.
   const [text, setText] = useState(() => params.cardUrls.join('\n'))
 
-  const [preview, setPreview] = useState<BackPrintPreview | null>(null)
-  const [previewing, setPreviewing] = useState(false)
+  const [frontPreview, setFrontPreview] = useState<SidePrintPreview | null>(null)
+  const [frontPreviewing, setFrontPreviewing] = useState(true)
+  const [backPreview, setBackPreview] = useState<BackPrintPreview | null>(null)
+  const [backPreviewing, setBackPreviewing] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [exportWarnings, setExportWarnings] = useState<string[]>([])
   const [exportError, setExportError] = useState<string | null>(null)
@@ -140,22 +193,43 @@ export function ProductionPanel({ params, snapshot }: ProductionPanelProps) {
     ? { order: params.order, item: params.item ?? '', partnerSlug: params.partnerSlug }
     : undefined
 
+  // The front carries no QR and no per-card text, so it is rendered once for the
+  // design rather than re-rendered every time the URL list is edited.
+  useEffect(() => {
+    let cancelled = false
+    setFrontPreviewing(true)
+    renderFrontPrintPreview(snapshot)
+      .then((result) => {
+        if (!cancelled) setFrontPreview(result)
+      })
+      .catch(() => {
+        if (!cancelled) setFrontPreview(null)
+      })
+      .finally(() => {
+        if (!cancelled) setFrontPreviewing(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [snapshot])
+
   // Live preview of card 1's back, debounced — each render is a full offscreen
   // Fabric load, so it must not run per keystroke.
   const firstCardUrl = cardUrls[0] ?? null
   useEffect(() => {
     let cancelled = false
-    setPreviewing(true)
+    setBackPreviewing(true)
     const timer = setTimeout(() => {
       renderBackPrintPreview(snapshot, firstCardUrl)
         .then((result) => {
-          if (!cancelled) setPreview(result)
+          if (!cancelled) setBackPreview(result)
         })
         .catch(() => {
-          if (!cancelled) setPreview(null)
+          if (!cancelled) setBackPreview(null)
         })
         .finally(() => {
-          if (!cancelled) setPreviewing(false)
+          if (!cancelled) setBackPreviewing(false)
         })
     }, PREVIEW_DEBOUNCE_MS)
 
@@ -292,12 +366,16 @@ export function ProductionPanel({ params, snapshot }: ProductionPanelProps) {
   }
 
   // The card body behind a transparent print PNG, so a white-module QR on black PVC
-  // is visible here rather than white-on-white. Engraved backs are opaque JPEGs and
+  // is visible here rather than white-on-white. Engraved sides are opaque JPEGs and
   // cover it anyway.
-  const cardBackImage = getVariation(snapshot.variationId ?? '')?.backImage
+  const variation = getVariation(snapshot.variationId ?? '')
+
+  const frontCaption = frontPreview?.engraved
+    ? 'Engraved artwork, black on white — one front.jpg for every card.'
+    : 'Full colour on a transparent background — one front.png for every card.'
 
   return (
-    <div className="max-w-3xl mx-auto rounded-xl border border-border bg-card p-5 space-y-5 text-left">
+    <div className="max-w-4xl mx-auto rounded-xl border border-border bg-card p-5 space-y-5 text-left">
       {/* Heading + order context */}
       <div className="flex items-start gap-3">
         <Wrench className="size-4 text-muted-foreground mt-0.5 shrink-0" />
@@ -324,27 +402,54 @@ export function ProductionPanel({ params, snapshot }: ProductionPanelProps) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* URLs */}
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <label
-              htmlFor="production-card-urls"
-              className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
-            >
-              Card URLs
-            </label>
-            <textarea
-              id="production-card-urls"
-              value={text}
-              onChange={(e) => handleTextChange(e.target.value)}
-              spellCheck={false}
-              rows={6}
-              placeholder="https://app.partner.com/r/ab12cd"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-y"
-            />
-          </div>
+      {/* Both sides of the print file, side by side — the same renders the bundle
+          carries, so one glance checks what the supplier actually receives. */}
+      <div className="space-y-2.5">
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          Print files
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+          <PrintFilePreview
+            label="Front"
+            alt="Front of card as it will print"
+            cardImage={variation?.frontImage}
+            preview={frontPreview}
+            loading={frontPreviewing}
+            caption={frontCaption}
+          />
+          <PrintFilePreview
+            label={backCount > 1 ? `Back — card 1 of ${backCount}` : 'Back'}
+            alt="Back of card with QR code"
+            cardImage={variation?.backImage}
+            preview={backPreview}
+            loading={backPreviewing}
+            caption={
+              backPreview?.hasQr
+                ? 'The QR sits where the placeholder was, at the size it will print.'
+                : 'No QR for card 1 yet — the placeholder is left out of print files.'
+            }
+          />
+        </div>
+      </div>
 
+      {/* Card URLs: the paste box, with what each line resolved to beside it. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-4">
+        <div className="space-y-2">
+          <label
+            htmlFor="production-card-urls"
+            className="block text-xs font-medium uppercase tracking-wider text-muted-foreground"
+          >
+            Card URLs
+          </label>
+          <textarea
+            id="production-card-urls"
+            value={text}
+            onChange={(e) => handleTextChange(e.target.value)}
+            spellCheck={false}
+            rows={7}
+            placeholder="https://app.partner.com/r/ab12cd"
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-y"
+          />
           <p className="text-xs text-muted-foreground">
             <span className="font-medium text-foreground">
               {assigned} of {backCount} {backCount === 1 ? 'card has' : 'cards have'} a QR
@@ -356,9 +461,14 @@ export function ProductionPanel({ params, snapshot }: ProductionPanelProps) {
               </>
             )}
           </p>
+        </div>
 
-          {rows.length > 0 && (
-            <ul className="max-h-44 overflow-y-auto space-y-1 pr-1">
+        <div className="space-y-2">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Card assignments
+          </p>
+          {rows.length > 0 ? (
+            <ul className="rounded-md border border-border bg-background/50 px-3 py-2 max-h-[10.5rem] overflow-y-auto space-y-1">
               {rows.map((row) => (
                 <li key={row.index} className="flex items-start gap-2 text-[11px] leading-4">
                   {row.valid ? (
@@ -389,11 +499,18 @@ export function ProductionPanel({ params, snapshot }: ProductionPanelProps) {
                 </li>
               ))}
             </ul>
+          ) : (
+            <div className="rounded-md border border-dashed border-border px-3 py-4">
+              <p className="text-[11px] leading-4 text-muted-foreground">
+                Nothing assigned yet. Paste one card URL per line, in card order — each line
+                becomes that card&rsquo;s QR code, and its ref is shown here.
+              </p>
+            </div>
           )}
 
           {params.invalid.length > 0 && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
-              <p className="text-xs text-amber-700 dark:text-amber-400">
+              <p className="text-[11px] leading-4 text-amber-700 dark:text-amber-400">
                 {params.invalid.length}{' '}
                 {params.invalid.length === 1 ? 'entry' : 'entries'} in the link could not be read as
                 a URL and {params.invalid.length === 1 ? 'is' : 'are'} not assigned to any card:{' '}
@@ -401,41 +518,6 @@ export function ProductionPanel({ params, snapshot }: ProductionPanelProps) {
               </p>
             </div>
           )}
-        </div>
-
-        {/* Live preview of card 1's back print file */}
-        <div className="space-y-1.5">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Back print file &mdash; card 1
-          </p>
-          <div
-            className="relative w-full overflow-hidden border border-border bg-muted"
-            style={{
-              borderRadius: CARD_CORNER_RADIUS,
-              aspectRatio: '1012 / 638',
-              backgroundImage: cardBackImage ? `url(${cardBackImage})` : undefined,
-              backgroundSize: 'cover',
-            }}
-          >
-            {preview && (
-              <img src={preview.dataUrl} alt="Back of card with QR code" className="w-full" />
-            )}
-            {previewing && (
-              <div className="absolute inset-0 flex items-center justify-center bg-background/40">
-                <Loader2 className="size-4 animate-spin text-muted-foreground" />
-              </div>
-            )}
-          </div>
-          <p className="text-[11px] text-muted-foreground">
-            {preview?.hasQr
-              ? 'The QR sits where the placeholder was, at the size it will print.'
-              : 'No QR for card 1 yet — the placeholder is left out of print files.'}
-          </p>
-          {preview?.warnings.map((previewWarning, i) => (
-            <p key={i} className="text-[11px] text-amber-700 dark:text-amber-400">
-              {previewWarning}
-            </p>
-          ))}
         </div>
       </div>
 
