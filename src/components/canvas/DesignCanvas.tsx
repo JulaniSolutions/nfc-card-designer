@@ -10,7 +10,8 @@ import { MobileAddElements } from '@/components/toolbar/DesignToolbar'
 import { CropActionBar } from '@/components/canvas/CropActionBar'
 import { TransparencyWarning, type WarningState } from '@/components/canvas/TransparencyWarning'
 import { isCropping } from '@/lib/crop-tool'
-import { updateQrPlaceholder, updateVariableTexts, isLockedElement } from '@/lib/back-card'
+import { updateQrPlaceholder, updateVariableTexts, isLockedElement, isQrPlaceholder } from '@/lib/back-card'
+import { QrDeleteDialog } from '@/components/canvas/QrDeleteDialog'
 import { addWaveIcon, removeWaveIcon, updateWaveIconColor } from '@/lib/wave-icon'
 import { pushState, undo, redo, isHistoryLocked } from '@/lib/canvas-history'
 import { convertCanvasToEngraved } from '@/lib/design-method'
@@ -75,6 +76,7 @@ function CardCanvas({ side }: { side: CardSide }) {
   const setCanvasJson = useDesignStore((s) => s.setCanvasJson)
   const setActiveSide = useDesignStore((s) => s.setActiveSide)
   const backOption = useDesignStore((s) => s.backOption)
+  const qrRemoved = useDesignStore((s) => s.qrRemoved)
   const variableFields = useDesignStore((s) => s.variableFields)
   const cardData = useDesignStore((s) => s.cardData)
 
@@ -294,7 +296,7 @@ function CardCanvas({ side }: { side: CardSide }) {
     updateQrPlaceholder(canvas)
     updateVariableTexts(canvas, variableFields, cardData)
     suppressSaveRef.current = false
-  }, [side, backOption, variationId, materialId, variableFields, cardData])
+  }, [side, backOption, qrRemoved, variationId, materialId, variableFields, cardData])
 
   // Front canvas: wave/NFC icon for plastic and bamboo
   useEffect(() => {
@@ -364,8 +366,14 @@ function CardCanvas({ side }: { side: CardSide }) {
         const canvas = canvasRef.current
         if (!canvas) return
         const active = canvas.getActiveObject()
+        if (!active || (active as FabricObject & { isEditing?: boolean }).isEditing) return
+        // The QR placeholder is deletable, but only through the warning dialog
+        if (isQrPlaceholder(active)) {
+          useDesignStore.getState().setQrDeletePromptOpen(true)
+          return
+        }
         const isUndeletable = !!(active as FabricObject & { _undeletable?: boolean })?._undeletable
-        if (active && !(active as FabricObject & { isEditing?: boolean }).isEditing && !isLockedElement(active) && !isUndeletable) {
+        if (!isLockedElement(active) && !isUndeletable) {
           canvas.remove(active)
           canvas.discardActiveObject()
           canvas.renderAll()
@@ -562,6 +570,9 @@ export function DesignCanvas() {
 
       {/* Mobile add elements — always visible below both canvases */}
       {!cropping && <MobileAddElements />}
+
+      {/* Confirmation before the QR placeholder is deleted */}
+      <QrDeleteDialog />
 
     </div>
   )

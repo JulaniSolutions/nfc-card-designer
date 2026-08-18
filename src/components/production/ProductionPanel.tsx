@@ -184,8 +184,11 @@ export function ProductionPanel({ params, snapshot }: ProductionPanelProps) {
   }, [text, backCount])
 
   const warnings = useMemo(
-    () => [...describeQrCoverage(cardUrls.length, backCount), ...describeCardUrlIssues(cardUrls)],
-    [cardUrls, backCount],
+    () => [
+      ...describeQrCoverage(cardUrls.length, backCount, snapshot.qrRemoved),
+      ...describeCardUrlIssues(cardUrls),
+    ],
+    [cardUrls, backCount, snapshot.qrRemoved],
   )
 
   const legacyPrintedMetal = isLegacyPrintedMetal(snapshot.materialId, snapshot.designMethod)

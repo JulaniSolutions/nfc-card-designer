@@ -20,6 +20,7 @@ interface DraftSnapshot {
   backBgColor: string
   designName: string
   backOption: string
+  qrRemoved?: boolean
   cardNames: string[]
   variableFields: { id: string; label: string }[]
   cardData: Record<string, string>[]
@@ -55,6 +56,7 @@ function takeSnapshot(): DraftSnapshot {
     backBgColor: s.backBgColor,
     designName: s.designName,
     backOption: s.backOption,
+    qrRemoved: s.qrRemoved,
     cardNames: s.cardNames,
     variableFields: s.variableFields,
     cardData: s.cardData,
@@ -186,6 +188,7 @@ export function restoreDraft(draft: DraftSnapshot): { convertedToEngraved: boole
   store.setDesignMethod(draft.designMethod as 'engraved' | 'printed')
   store.setDesignName(draft.designName)
   store.setBackOption(draft.backOption as 'qr-only' | 'qr-name')
+  store.setQrRemoved(draft.qrRemoved === true)
 
   // Set canvas JSON in store
   if (draft.frontCanvasJson) store.setCanvasJson('front', draft.frontCanvasJson)

@@ -252,6 +252,7 @@ Deno.serve(async (req) => {
       back_bg_color,
       design_method,
       back_option,
+      qr_removed,
       variable_fields,
       front_preview,
       back_preview,
@@ -319,6 +320,7 @@ Deno.serve(async (req) => {
       back_bg_color: back_bg_color || '#ffffff',
       design_method: normalizeDesignMethod(material_id, design_method),
       back_option: back_option || 'qr-only',
+      qr_removed: qr_removed === true,
       variable_fields: variableFields,
       updated_at: new Date().toISOString(),
     }

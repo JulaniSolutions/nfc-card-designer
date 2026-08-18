@@ -363,9 +363,20 @@ export function LayersPanel() {
                 {expandedIndex === index && (
                   <div className="pl-7 pr-2 py-2">
                     {layer.type === 'qr' ? (
-                      <p className="text-[10px] text-muted-foreground">
-                        QR code is added automatically. Drag to reposition.
-                      </p>
+                      <>
+                        <p className="text-[10px] text-muted-foreground">
+                          QR code is added automatically. Drag to reposition.
+                        </p>
+                        <Button
+                          onClick={() => useDesignStore.getState().setQrDeletePromptOpen(true)}
+                          variant="ghost"
+                          size="sm"
+                          className="w-full gap-1.5 h-7 text-xs text-destructive hover:text-destructive mt-1.5"
+                        >
+                          <Trash2 className="size-3" />
+                          Delete
+                        </Button>
+                      </>
                     ) : layer.type === 'icon' ? (
                       <IconLayerControls
                         object={layer.object as FabricImage}

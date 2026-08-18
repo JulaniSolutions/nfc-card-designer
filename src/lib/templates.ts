@@ -20,6 +20,7 @@ export interface Template {
   back_bg_color: string
   design_method: string
   back_option: string
+  qr_removed: boolean | null
   variable_fields: VariableField[] | null
   front_preview_url: string | null
   back_preview_url: string | null
@@ -237,6 +238,7 @@ export async function publishTemplate(input: PublishTemplateInput): Promise<Publ
     back_bg_color: state.backBgColor,
     design_method: state.designMethod,
     back_option: state.backOption,
+    qr_removed: state.qrRemoved,
     variable_fields: state.variableFields,
     front_preview: frontPreview,
     back_preview: backPreview,
@@ -317,7 +319,7 @@ export async function loadTemplate(templateId: string): Promise<Template | null>
 
   const { data, error } = await supabase
     .from('templates')
-    .select('template_id, name, description, material_id, variation_id, front_canvas_json, back_canvas_json, front_bg_color, back_bg_color, design_method, back_option, variable_fields, front_preview_url, back_preview_url, use_count, created_at, updated_at')
+    .select('template_id, name, description, material_id, variation_id, front_canvas_json, back_canvas_json, front_bg_color, back_bg_color, design_method, back_option, qr_removed, variable_fields, front_preview_url, back_preview_url, use_count, created_at, updated_at')
     .eq('template_id', templateId)
     .single()
 
@@ -394,6 +396,7 @@ export function applyTemplateToStore(template: Template): ApplyTemplateResult {
     designName: template.name ? `${template.name} (copy)` : '',
     designMethod,
     backOption: (template.back_option as BackOption) || 'qr-only',
+    qrRemoved: template.qr_removed === true,
     variableFields: template.variable_fields ?? undefined,
     sourceTemplateId: template.template_id,
   })

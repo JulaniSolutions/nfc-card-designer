@@ -1,4 +1,5 @@
 import { useDesignStore } from '@/store/design-store'
+import { updateQrPlaceholder } from '@/lib/back-card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -7,6 +8,8 @@ import { Minus, Plus, X } from 'lucide-react'
 export function BackCardOptions() {
   const backOption = useDesignStore((s) => s.backOption)
   const setBackOption = useDesignStore((s) => s.setBackOption)
+  const qrRemoved = useDesignStore((s) => s.qrRemoved)
+  const setQrRemoved = useDesignStore((s) => s.setQrRemoved)
   const quantity = useDesignStore((s) => s.quantity)
   const setQuantity = useDesignStore((s) => s.setQuantity)
   const variableFields = useDesignStore((s) => s.variableFields)
@@ -47,6 +50,31 @@ export function BackCardOptions() {
             QR + Name
           </button>
         </div>
+
+        {/* The QR was deliberately deleted — say so, and offer the way back */}
+        {qrRemoved && (
+          <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 space-y-1.5">
+            <p className="text-[10px] text-amber-700 dark:text-amber-400">
+              The QR code has been removed — your cards will be produced without
+              one. We highly recommend keeping it.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full h-7 text-xs"
+              onClick={() => {
+                setQrRemoved(false)
+                // Re-add immediately and unsuppressed, so the canvas JSON and the
+                // layers panel update now — the canvas effect's own call runs with
+                // saves suppressed and would leave both stale until the next edit.
+                const canvas = window.__fabricCanvasBack
+                if (canvas) updateQrPlaceholder(canvas)
+              }}
+            >
+              Restore QR code
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Variable fields + quantity + data entry */}

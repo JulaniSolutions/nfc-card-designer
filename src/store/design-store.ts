@@ -56,6 +56,14 @@ export interface DesignState {
 
   // Back of card
   backOption: BackOption
+  /**
+   * The user deliberately deleted the QR placeholder. Kept as an explicit flag —
+   * a back canvas with no placeholder also describes designs saved before the
+   * placeholder existed, and those must keep getting a QR at the standard spot.
+   */
+  qrRemoved: boolean
+  /** UI state: the "are you sure" dialog shown before the QR is deleted. */
+  qrDeletePromptOpen: boolean
   cardNames: string[] // kept for backward compat
   variableFields: VariableField[]
   cardData: CardData
@@ -87,6 +95,8 @@ export interface DesignState {
   setSaving: (saving: boolean) => void
   setLastSaved: (date: Date) => void
   setBackOption: (option: BackOption) => void
+  setQrRemoved: (removed: boolean) => void
+  setQrDeletePromptOpen: (open: boolean) => void
   setQuantity: (qty: number) => void
   setCardName: (index: number, name: string) => void
   addVariable: (label: string) => void
@@ -107,6 +117,7 @@ export interface DesignState {
     designName: string
     designMethod?: DesignMethod
     backOption?: BackOption
+    qrRemoved?: boolean
     cardNames?: string[]
     variableFields?: VariableField[]
     cardData?: CardData
@@ -124,6 +135,7 @@ export interface DesignState {
     designName: string
     designMethod?: DesignMethod
     backOption?: BackOption
+    qrRemoved?: boolean
     variableFields?: VariableField[]
     sourceTemplateId: string
   }) => void
@@ -146,6 +158,8 @@ export const useDesignStore = create<DesignState>((set, get) => ({
   backBgColor: '#ffffff',
   designName: '',
   backOption: 'qr-only' as BackOption,
+  qrRemoved: false,
+  qrDeletePromptOpen: false,
   cardNames: [''],
   variableFields: [{ ...DEFAULT_NAME_FIELD }],
   cardData: [{ name: '' }],
@@ -171,6 +185,8 @@ export const useDesignStore = create<DesignState>((set, get) => ({
     backBgColor: '#ffffff',
     designName: '',
     backOption: 'qr-only' as BackOption,
+    qrRemoved: false,
+    qrDeletePromptOpen: false,
     cardNames: [''],
     variableFields: [{ ...DEFAULT_NAME_FIELD }],
     cardData: [{ name: '' }],
@@ -241,6 +257,14 @@ export const useDesignStore = create<DesignState>((set, get) => ({
     if (get().designId) updates.hasUnsavedChanges = true
     set(updates)
   },
+
+  setQrRemoved: (removed) => {
+    const updates: Partial<DesignState> = { qrRemoved: removed }
+    if (get().designId) updates.hasUnsavedChanges = true
+    set(updates)
+  },
+
+  setQrDeletePromptOpen: (open) => set({ qrDeletePromptOpen: open }),
 
   setQuantity: (qty) => {
     const { cardData, variableFields } = get()
@@ -364,6 +388,7 @@ export const useDesignStore = create<DesignState>((set, get) => ({
       designId: data.designId,
       designName: data.designName,
       backOption: data.backOption ?? 'qr-only',
+      qrRemoved: data.qrRemoved ?? false,
       cardNames,
       variableFields,
       cardData,
@@ -398,6 +423,7 @@ export const useDesignStore = create<DesignState>((set, get) => ({
       backBgColor: data.backBgColor,
       designName: data.designName,
       backOption: data.backOption ?? 'qr-only',
+      qrRemoved: data.qrRemoved ?? false,
       cardNames: [''],
       variableFields,
       cardData: [emptyRow],

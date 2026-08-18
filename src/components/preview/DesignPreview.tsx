@@ -26,6 +26,7 @@ interface DesignPreviewSnapshot {
   variationId?: string | null
   designMethod?: DesignMethod
   backOption?: BackOption
+  qrRemoved?: boolean
   variableFields?: VariableField[]
 }
 
@@ -51,6 +52,7 @@ export function DesignPreview({
   variationId: variationIdProp,
   designMethod: designMethodProp,
   backOption: backOptionProp,
+  qrRemoved: qrRemovedProp,
   variableFields: variableFieldsProp,
 }: DesignPreviewProps) {
   const store = useDesignStore()
@@ -68,6 +70,7 @@ export function DesignPreview({
   const variationId = variationIdProp !== undefined ? variationIdProp : store.variationId
   const designMethod = designMethodProp !== undefined ? designMethodProp : store.designMethod
   const backOption = backOptionProp !== undefined ? backOptionProp : store.backOption
+  const qrRemoved = qrRemovedProp !== undefined ? qrRemovedProp : store.qrRemoved
   const variableFields = variableFieldsProp !== undefined ? variableFieldsProp : store.variableFields
 
   const [frontImage, setFrontImage] = useState<string | null>(null)
@@ -97,6 +100,7 @@ export function DesignPreview({
       variationId,
       designMethod,
       backOption,
+      qrRemoved,
       quantity,
       cardData,
       variableFields,
@@ -111,6 +115,7 @@ export function DesignPreview({
       variationId,
       designMethod,
       backOption,
+      qrRemoved,
       quantity,
       cardData,
       variableFields,

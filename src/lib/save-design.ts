@@ -22,6 +22,7 @@ export interface SavedDesign {
   back_bg_color: string
   design_method: string
   back_option: string
+  qr_removed: boolean | null
   card_names: string[]
   variable_fields: { id: string; label: string }[] | null
   card_data: Record<string, string>[] | null
@@ -233,7 +234,7 @@ export async function saveDesign(turnstileToken?: string | null): Promise<string
   }
 
   const state = refreshedState
-  const { materialId, variationId, frontCanvasJson, backCanvasJson, frontBgColor, backBgColor, designId, designName, designMethod, backOption, cardNames, variableFields, cardData, quantity, sourceTemplateId } = state
+  const { materialId, variationId, frontCanvasJson, backCanvasJson, frontBgColor, backBgColor, designId, designName, designMethod, backOption, qrRemoved, cardNames, variableFields, cardData, quantity, sourceTemplateId } = state
 
   // Generate a stable ID before the first attempt so retries don't create duplicates
   const effectiveId = designId || generateShortId()
@@ -249,6 +250,7 @@ export async function saveDesign(turnstileToken?: string | null): Promise<string
     back_bg_color: backBgColor,
     design_method: designMethod,
     back_option: backOption,
+    qr_removed: qrRemoved,
     card_names: cardNames, // backward compat
     variable_fields: variableFields,
     card_data: cardData,
@@ -333,6 +335,7 @@ export async function loadDesign(id: string): Promise<boolean> {
     designName: design.name || '',
     designMethod: (design.design_method as 'engraved' | 'printed') || 'printed',
     backOption: (design.back_option as 'qr-only' | 'qr-name') || 'qr-only',
+    qrRemoved: design.qr_removed === true,
     cardNames: design.card_names || [''],
     variableFields: design.variable_fields || undefined,
     cardData: design.card_data || undefined,

@@ -169,9 +169,18 @@ function removeAllPlaceholders(canvas: Canvas) {
 
 /**
  * Add or update the QR code placeholder on the back canvas.
+ *
+ * When the user has deleted the QR (`qrRemoved`), this strips any placeholder
+ * instead — including ones re-materialising from a loaded JSON or an undo.
  */
 export function updateQrPlaceholder(canvas: Canvas) {
-  const { materialId, backOption } = useDesignStore.getState()
+  const { materialId, backOption, qrRemoved } = useDesignStore.getState()
+
+  if (qrRemoved) {
+    removeAllPlaceholders(canvas)
+    canvas.renderAll()
+    return
+  }
   const color = getColor()
   const { left, top, size } = getQrPosition(materialId, backOption)
 

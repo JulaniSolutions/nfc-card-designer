@@ -50,6 +50,8 @@ export interface PrintExportSnapshot {
   /** Legacy gate only — the per-side matrix comes from the material. */
   designMethod: DesignMethod
   backOption: BackOption
+  /** The designer deleted the QR — no QR is injected, however many URLs arrive. */
+  qrRemoved?: boolean
   quantity: number
   cardData: Record<string, string>[]
   variableFields: { id: string; label: string }[]
@@ -405,7 +407,18 @@ export function backFileCount(
  * Exported so the production panel can show the same sentences live, before the
  * bundle exists, rather than keeping a second set of wordings in sync.
  */
-export function describeQrCoverage(cardUrlCount: number, backCount: number): string[] {
+export function describeQrCoverage(
+  cardUrlCount: number,
+  backCount: number,
+  qrRemoved = false,
+): string[] {
+  if (qrRemoved) {
+    return [
+      cardUrlCount > 0
+        ? 'The designer removed the QR code from this design, so every card prints without one — the card URLs are still listed in links.csv for chip encoding.'
+        : 'The designer removed the QR code from this design, so every card prints without one.',
+    ]
+  }
   if (cardUrlCount === 0) {
     return [
       'No QR codes — the placeholder has been left out of the print files. Open this design from the order screen, or paste the card URLs, to embed QR codes.',
@@ -658,8 +671,11 @@ export async function renderBackPrintPreview(
   try {
     const warnings = [...back.warnings]
     const qrGeometry = back.qrGeometry ?? getQrPosition(design.materialId, design.backOption)
-    const url = cardUrl?.trim()
-    warnings.push(...describePlaceholderIssues(qrGeometry, !!back.qrGeometry, !!url))
+    // A deliberately removed QR is not a missing placeholder — no injection, no warning.
+    const url = design.qrRemoved ? null : cardUrl?.trim()
+    if (!design.qrRemoved) {
+      warnings.push(...describePlaceholderIssues(qrGeometry, !!back.qrGeometry, !!url))
+    }
 
     const values = design.cardData?.[cardIndex] || {}
     for (const obj of variableTextObjects(back.objects)) {
@@ -719,6 +735,7 @@ export async function exportPrintFiles(
     variationId: store.variationId,
     designMethod: store.designMethod,
     backOption: store.backOption,
+    qrRemoved: store.qrRemoved,
     quantity: store.quantity,
     cardData: store.cardData,
     variableFields: store.variableFields,
@@ -756,7 +773,7 @@ export async function exportPrintFiles(
 
   // === Backs — one file per card ===
   const backCount = backFileCount(design.backOption, cardData.length, cardUrls.length)
-  warnings.push(...describeQrCoverage(cardUrls.length, backCount))
+  warnings.push(...describeQrCoverage(cardUrls.length, backCount, design.qrRemoved))
   warnings.push(...describeCardUrlIssues(cardUrls))
 
   const rows: LinkRow[] = []
@@ -765,13 +782,16 @@ export async function exportPrintFiles(
     warnings.push(...back.warnings)
 
     const qrGeometry = back.qrGeometry ?? getQrPosition(design.materialId, design.backOption)
-    warnings.push(...describePlaceholderIssues(qrGeometry, !!back.qrGeometry, cardUrls.length > 0))
+    if (!design.qrRemoved) {
+      warnings.push(...describePlaceholderIssues(qrGeometry, !!back.qrGeometry, cardUrls.length > 0))
+    }
 
     // One QR per card, rendered up front at the placeholder's print-resolution size
     // and injected below. A card with no URL simply prints without one — the
     // placeholder is stripped either way and the coverage warning above stands.
+    // A design whose QR was deliberately removed generates none at all.
     const qrImages: (PrintQrImage | undefined)[] = []
-    if (cardUrls.length) {
+    if (cardUrls.length && !design.qrRemoved) {
       const sizePx = Math.max(1, Math.round(qrGeometry.size * EXPORT_MULTIPLIER))
       const colors = await buildQrColors(design, qrGeometry, backEngraved)
       let failed = 0

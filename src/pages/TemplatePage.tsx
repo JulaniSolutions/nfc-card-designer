@@ -185,6 +185,7 @@ function TemplateView({ id }: { id: string | undefined }) {
         variationId={template.variation_id}
         designMethod={template.design_method as DesignMethod}
         backOption={template.back_option as BackOption}
+        qrRemoved={template.qr_removed === true}
         variableFields={template.variable_fields ?? []}
       />
 
