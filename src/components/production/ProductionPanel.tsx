@@ -670,7 +670,9 @@ export function ProductionPanel({ params, snapshot }: ProductionPanelProps) {
             {driveResult.uploaded.length === 1 ? 'file' : 'files'} uploaded to Drive
             {driveResult.writeBack === 'ok' && <> &middot; Saved to order ✓</>}
             {driveResult.writeBack === 'skipped' && (
-              <> &middot; copy the link below into the order’s proof links.</>
+              params.wpDomain
+                ? <> &middot; copy the link below into the order’s proof links.</>
+                : <> &middot; no ordering portal on this link — copy the folder link to wherever the order lives.</>
             )}
             {driveResult.writeBack === 'failed' && (
               <>

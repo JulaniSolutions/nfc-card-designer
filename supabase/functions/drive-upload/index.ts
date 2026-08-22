@@ -190,7 +190,30 @@ function readIdField(value: unknown, field: string): string {
   return raw.trim()
 }
 
-function readFolderName(value: unknown): string {
+/** Mirror of the client `slugify()` — must produce the same folder-name segment. */
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
+/**
+ * The folder a token is allowed to write into, as the client's `bundleName()`
+ * builds it: `Order-<order>[-item-<item slug>]`, optionally followed by a
+ * partner slug. Binding the folder to the signed order/item is what stops a
+ * token for one order from overwriting another order's print files — the
+ * token proves the order, the folder name must agree with it.
+ */
+function requiredFolderPrefix(order: string, item: string): string {
+  const itemSlug = slugify(item)
+  return itemSlug ? `Order-${order}-item-${itemSlug}` : `Order-${order}`
+}
+
+function readFolderName(value: unknown, order: string, item: string): string {
   const name = typeof value === 'string' ? value.trim() : ''
   if (
     !name ||
@@ -202,6 +225,10 @@ function readFolderName(value: unknown): string {
     hasControlChars(name)
   ) {
     throw new ApiError(400, 'Missing or malformed folderName.')
+  }
+  const prefix = requiredFolderPrefix(order, item)
+  if (name !== prefix && !name.startsWith(`${prefix}-`)) {
+    throw new ApiError(403, 'folderName does not match the order this token was issued for.')
   }
   return name
 }
@@ -615,13 +642,13 @@ Deno.serve(async (req) => {
       return json({ error: 'Missing or malformed token.' }, 403)
     }
     if (expSeconds <= Math.floor(Date.now() / 1000)) {
-      return json({ error: 'This production link has expired — reopen it from the order.' }, 403)
+      return json({ error: 'This production link has expired — reopen it from the order, or rebuild it on the production page.' }, 403)
     }
     if (!(await verifyToken(secrets.sharedSecret, orderId, itemId, expRaw, token.trim()))) {
       return json({ error: 'Invalid token.' }, 403)
     }
 
-    const name = readFolderName(folderName)
+    const name = readFolderName(folderName, orderId, itemId)
     const requested = parseFiles(files)
 
     const usedDirs = ALLOWED_DIRS.filter((dir) => requested.some((file) => file.dir === dir))

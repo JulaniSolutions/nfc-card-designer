@@ -40,6 +40,7 @@ Standalone, no-auth web app for designing custom NFC cards (business cards / tag
 ## Pages
 - `/` — Main designer editor (`DesignerPage`)
 - `/design/:id(/:slug)` — Shared design preview, read-only with "Edit" option (`SharedDesignPage`)
+- `/production` — Staff-only, unlinked: lists saved designs with filters and builds a production deep link (Drive-enabled) without WordPress. Gated by the `PRODUCTION_STAFF_KEY` Supabase secret via the `mint-production-token` edge function (`ProductionPage`, `src/lib/production-link.ts`)
 
 ## Key Paths
 - `src/config/materials.ts` — Card materials and variations config (add new materials here)
