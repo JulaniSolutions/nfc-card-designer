@@ -9,6 +9,7 @@ import {
   getCurrentEngravedColor,
 } from '@/lib/engraved-filters'
 import { isSideEngraved } from '@/config/materials'
+import { uploadOriginalSourceFile } from '@/lib/upload-asset'
 import { cn } from '@/lib/utils'
 
 export type WarningState = 'detected' | 'bg_removed' | 'dismissed'
@@ -74,12 +75,16 @@ export function TransparencyWarning({
           applyEngravedFiltersToImage(targetImage, getCurrentEngravedColor())
         }
 
-        // Mark as not opaque
-        const tagged = targetImage as FabricImage & { _isOpaque?: boolean }
+        // Mark as not opaque. The stored asset no longer matches this element —
+        // clear it, or the next save skips the upload and swaps the old image back in.
+        const tagged = targetImage as FabricImage & { _isOpaque?: boolean; _assetUrl?: string }
         tagged._isOpaque = false
+        tagged._assetUrl = undefined
 
-        const activeCanvas = window.__fabricCanvas
+        const activeCanvas = targetImage.canvas
         activeCanvas?.renderAll()
+        // setElement emits no events — fire so history and the store see the swap
+        activeCanvas?.fire('object:modified', { target: targetImage })
 
         setIsRemoving(false)
         onStateChange('bg_removed')
@@ -111,11 +116,15 @@ export function TransparencyWarning({
         applyEngravedFiltersToImage(targetImage, getCurrentEngravedColor())
       }
 
-      const tagged = targetImage as FabricImage & { _isOpaque?: boolean }
+      // Same stale-asset rule as removal: the element changed, so force a re-upload
+      const tagged = targetImage as FabricImage & { _isOpaque?: boolean; _assetUrl?: string }
       tagged._isOpaque = true
+      tagged._assetUrl = undefined
       customImg._originalSrc = undefined
 
-      window.__fabricCanvas?.renderAll()
+      const canvas = targetImage.canvas
+      canvas?.renderAll()
+      canvas?.fire('object:modified', { target: targetImage })
       onStateChange('detected')
     }
     restored.src = customImg._originalSrc
@@ -142,7 +151,7 @@ export function TransparencyWarning({
           targetImage.set({ width: newImg.width, height: newImg.height })
 
           // Scale to fit canvas
-          const canvas = window.__fabricCanvas
+          const canvas = targetImage.canvas
           if (canvas) {
             const maxDim = Math.max(canvas.width!, canvas.height!) * 0.6
             const imgMaxDim = Math.max(newImg.width, newImg.height)
@@ -155,12 +164,27 @@ export function TransparencyWarning({
             applyEngravedFiltersToImage(targetImage, getCurrentEngravedColor())
           }
 
-          // Clear undo state
-          const customImg = targetImage as FabricImage & { _originalSrc?: string; _isOpaque?: boolean }
+          // Clear undo state, and drop the stored asset so the next save
+          // re-uploads this element instead of swapping the old image back in
+          const customImg = targetImage as FabricImage & {
+            _originalSrc?: string
+            _isOpaque?: boolean
+            _assetUrl?: string
+            _assetName?: string
+            _originalAssetUrl?: string
+          }
           customImg._originalSrc = undefined
           customImg._isOpaque = false
+          customImg._assetUrl = undefined
+          customImg._assetName = file.name
+
+          // Refresh the untouched original for designer access (fire-and-forget)
+          uploadOriginalSourceFile(file).then((asset) => {
+            if (asset) customImg._originalAssetUrl = asset.url
+          })
 
           canvas?.renderAll()
+          canvas?.fire('object:modified', { target: targetImage })
           onStateChange('dismissed')
         }
         newImg.src = dataUrl

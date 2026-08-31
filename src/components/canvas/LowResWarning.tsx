@@ -8,6 +8,7 @@ import {
   getCurrentEngravedColor,
 } from '@/lib/engraved-filters'
 import { isSideEngraved } from '@/config/materials'
+import { uploadOriginalSourceFile } from '@/lib/upload-asset'
 import {
   CANVAS_PPI,
   MIN_PRINT_PPI,
@@ -77,10 +78,19 @@ export function LowResWarning({ targetImage, onStateChange }: LowResWarningProps
 
           // The stored asset no longer matches this element — clear so the next
           // save re-uploads instead of swapping the src back to the old image
-          const tagged = targetImage as LowResTagged & { _assetUrl?: string; _assetName?: string }
+          const tagged = targetImage as LowResTagged & {
+            _assetUrl?: string
+            _assetName?: string
+            _originalAssetUrl?: string
+          }
           tagged._assetUrl = undefined
           tagged._assetName = file.name
           tagged._lowResAckPpi = undefined
+
+          // Refresh the untouched original for designer access (fire-and-forget)
+          uploadOriginalSourceFile(file).then((asset) => {
+            if (asset) tagged._originalAssetUrl = asset.url
+          })
 
           const canvas = targetImage.canvas
           canvas?.renderAll()
