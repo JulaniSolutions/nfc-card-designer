@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Canvas, FabricObject, FabricImage, InteractiveFabricObject, Textbox, IText } from 'fabric'
+import { Canvas, FabricObject, FabricImage, Group, InteractiveFabricObject, Textbox, IText } from 'fabric'
 import { CARD_WIDTH, CARD_HEIGHT, CARD_CORNER_RADIUS } from '@/config/canvas'
 import { useDesignStore, type CardSide } from '@/store/design-store'
 import { getVariation, isFrontEngraved, shouldHideWaveIcon } from '@/config/materials'
@@ -9,6 +9,8 @@ import { LayersPanel } from '@/components/layers/LayersPanel'
 import { MobileAddElements } from '@/components/toolbar/DesignToolbar'
 import { CropActionBar } from '@/components/canvas/CropActionBar'
 import { TransparencyWarning, type WarningState } from '@/components/canvas/TransparencyWarning'
+import { LowResWarning } from '@/components/canvas/LowResWarning'
+import { shouldWarnLowRes } from '@/lib/image-resolution'
 import { isCropping } from '@/lib/crop-tool'
 import { updateQrPlaceholder, updateVariableTexts, isLockedElement, isQrPlaceholder } from '@/lib/back-card'
 import { QrDeleteDialog } from '@/components/canvas/QrDeleteDialog'
@@ -131,6 +133,37 @@ function CardCanvas({ side }: { side: CardSide }) {
     canvas.on('object:added', handler)
     canvas.on('object:removed', handler)
 
+    // Low-res warning on scale-up — object:modified fires once the transform
+    // ends, so this never runs mid-drag. A multi-select delivers the selection
+    // as the target with the group scale not yet baked into its members.
+    const checkImageResolution = ({ target }: { target?: FabricObject }) => {
+      if (!target) return
+      const images = target instanceof FabricImage
+        ? [target]
+        : target instanceof Group
+          ? target.getObjects().filter((o): o is FabricImage => o instanceof FabricImage)
+          : []
+      if (images.length === 0) return
+
+      const store = useDesignStore.getState()
+      const offender = images.find(shouldWarnLowRes)
+      if (offender) {
+        const tagged = offender as FabricImage & { _designId?: string }
+        // Images from older saved designs may predate _designId tagging
+        if (!tagged._designId) tagged._designId = crypto.randomUUID()
+        store.setLowResWarning('detected', tagged._designId)
+        return
+      }
+      // Scaled back to a safe size — retract an open warning for these images
+      if (
+        store.lowResImageWarning === 'detected' &&
+        images.some((img) => (img as FabricImage & { _designId?: string })._designId === store.lowResImageId)
+      ) {
+        store.setLowResWarning(null)
+      }
+    }
+    canvas.on('object:modified', checkImageResolution)
+
     // Enforce text control locks on every path: new text, loaded text, pasted text
     const enforceTextLocks = (e: { target?: FabricObject } | { selected?: FabricObject[] }) => {
       const target = 'target' in e ? e.target : undefined
@@ -221,6 +254,7 @@ function CardCanvas({ side }: { side: CardSide }) {
     return () => {
       detachGuides()
       canvas.off('object:modified', handler)
+      canvas.off('object:modified', checkImageResolution)
       canvas.off('object:added', handler)
       canvas.off('object:removed', handler)
       canvas.off('object:added', enforceTextLocks)
@@ -456,7 +490,7 @@ function CardCanvas({ side }: { side: CardSide }) {
   )
 }
 
-function getOpaqueImage(imageId: string | null): FabricImage | null {
+function findImageById(imageId: string | null): FabricImage | null {
   if (!imageId) return null
   for (const canvas of [window.__fabricCanvasFront, window.__fabricCanvasBack]) {
     if (!canvas) continue
@@ -473,6 +507,9 @@ export function DesignCanvas() {
   const opaqueWarning = useDesignStore((s) => s.opaqueImageWarning)
   const opaqueImageId = useDesignStore((s) => s.opaqueImageId)
   const setOpaqueWarning = useDesignStore((s) => s.setOpaqueWarning)
+  const lowResWarning = useDesignStore((s) => s.lowResImageWarning)
+  const lowResImageId = useDesignStore((s) => s.lowResImageId)
+  const setLowResWarning = useDesignStore((s) => s.setLowResWarning)
   const [cropping, setCropping] = useState(false)
   const [hasSelection, setHasSelection] = useState(false)
 
@@ -515,7 +552,8 @@ export function DesignCanvas() {
     }
   }, [activeSide])
 
-  const targetImage = getOpaqueImage(opaqueImageId)
+  const targetImage = findImageById(opaqueImageId)
+  const lowResTarget = findImageById(lowResImageId)
 
   // Floating layers panel — anchored to the active card on xl screens
   const layersFloating = !cropping && (
@@ -543,6 +581,14 @@ export function DesignCanvas() {
           state={opaqueWarning as WarningState}
           onStateChange={(state) => setOpaqueWarning(state)}
           targetImage={targetImage}
+        />
+      )}
+
+      {/* Low-resolution image warning banner */}
+      {lowResWarning === 'detected' && !cropping && (
+        <LowResWarning
+          targetImage={lowResTarget}
+          onStateChange={(state) => setLowResWarning(state)}
         />
       )}
 

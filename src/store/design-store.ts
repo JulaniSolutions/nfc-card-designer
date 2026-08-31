@@ -73,6 +73,10 @@ export interface DesignState {
   opaqueImageWarning: 'detected' | 'bg_removed' | 'dismissed' | null
   opaqueImageId: string | null
 
+  // Low-resolution image warning
+  lowResImageWarning: 'detected' | 'dismissed' | null
+  lowResImageId: string | null
+
   // Save state
   designId: string | null
   isSaving: boolean
@@ -85,6 +89,7 @@ export interface DesignState {
   // Actions
   resetDesign: () => void
   setOpaqueWarning: (state: 'detected' | 'bg_removed' | 'dismissed' | null, imageId?: string | null) => void
+  setLowResWarning: (state: 'detected' | 'dismissed' | null, imageId?: string | null) => void
   setDesignName: (name: string) => void
   setMaterial: (materialId: string, variationId: string) => void
   setDesignMethod: (method: DesignMethod) => void
@@ -166,6 +171,8 @@ export const useDesignStore = create<DesignState>((set, get) => ({
   quantity: 1,
   opaqueImageWarning: null,
   opaqueImageId: null,
+  lowResImageWarning: null,
+  lowResImageId: null,
   designId: null,
   isSaving: false,
   lastSaved: null,
@@ -193,6 +200,8 @@ export const useDesignStore = create<DesignState>((set, get) => ({
     quantity: 1,
     opaqueImageWarning: null,
     opaqueImageId: null,
+    lowResImageWarning: null,
+    lowResImageId: null,
     designId: null,
     isSaving: false,
     lastSaved: null,
@@ -203,6 +212,11 @@ export const useDesignStore = create<DesignState>((set, get) => ({
   setOpaqueWarning: (state, imageId) => set({
     opaqueImageWarning: state,
     opaqueImageId: imageId ?? get().opaqueImageId,
+  }),
+
+  setLowResWarning: (state, imageId) => set({
+    lowResImageWarning: state,
+    lowResImageId: imageId ?? get().lowResImageId,
   }),
 
   setDesignName: (name) => set({ designName: name }),
@@ -430,6 +444,8 @@ export const useDesignStore = create<DesignState>((set, get) => ({
       quantity: 1,
       opaqueImageWarning: null,
       opaqueImageId: null,
+      lowResImageWarning: null,
+      lowResImageId: null,
       designId: null,
       isSaving: false,
       lastSaved: null,

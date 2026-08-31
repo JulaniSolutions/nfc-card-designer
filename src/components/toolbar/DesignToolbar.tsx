@@ -12,6 +12,7 @@ import {
 } from '@/lib/engraved-filters'
 import { isBackEngraved, isFrontEngraved, isSideEngraved } from '@/config/materials'
 import { isImageOpaque } from '@/lib/transparency'
+import { isLowResSource } from '@/lib/image-resolution'
 import { uploadOriginalSourceFile } from '@/lib/upload-asset'
 
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/svg+xml', 'image/webp']
@@ -152,6 +153,16 @@ function addImageToCanvas(
       uploadOriginalSourceFile(file).then((asset) => {
         if (asset) tagged._originalAssetUrl = asset.url
       })
+
+      // Tiny sources get a heads-up right away; stretched use of a decent
+      // source is caught later by the object:modified check. SVGs are vector.
+      if (file.type !== 'image/svg+xml') {
+        const srcW = finalImg.naturalWidth || finalImg.width
+        const srcH = finalImg.naturalHeight || finalImg.height
+        if (isLowResSource(srcW, srcH)) {
+          useDesignStore.getState().setLowResWarning('detected', imgId)
+        }
+      }
 
       // Async transparency check — only warn if added in engraved mode
       if (isEngraved) {
